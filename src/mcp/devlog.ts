@@ -146,6 +146,7 @@ export function dlogBlock(title: string, body: string): void {
 
 export interface SessionRow {
   pid: number;
+  /** Normalized forward-slash repo path (comparisons are separator-agnostic). */
   cwd: string;
   /** Process id of whoever spawned us (the agent/editor) — "who". */
   hostPid: number | null;
@@ -189,7 +190,7 @@ export function registerSession(root: string, version: string): void {
     const rows = readSessions().filter((r) => r.pid !== process.pid);
     rows.push({
       pid: process.pid,
-      cwd: root,
+      cwd: root.split('\\').join('/'),
       hostPid: process.ppid ?? null,
       hostCmd: shortHostCmd(),
       user: process.env.USERNAME ?? process.env.USER ?? 'unknown',
