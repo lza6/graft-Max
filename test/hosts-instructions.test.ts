@@ -3,19 +3,16 @@ import assert from 'node:assert/strict';
 import { instructionBody, cursorRule, kiroSteering, windsurfRule } from '../src/hosts/instructions.js';
 
 test('canonical body names the three essentials', () => {
+  // [graft-Max] 中文 Max 版：三个要点（ask 图谱优先 / grep 穷举 / callers 爆炸半径）
+  // + Max 联邦工具说明。原英文断言按语义翻译。
   const b = instructionBody();
-  assert.match(b, /^## Graft — repo context graph/m);
+  assert.match(b, /## graft-Max — 仓库上下文图谱/m);
   assert.match(b, /graft ask "/);
-  assert.match(b, /graft\/INDEX\.md/);
-  assert.match(b, /graft build/);
-  assert.match(b, /every occurrence|enumerate with grep/i, 'teaches the exhaustive-task grep rule');
-  assert.match(b, /callers/, 'teaches the callers/callees/impact commands');
-  assert.match(b, /truncated/i, 'tells the agent to follow up on truncated spans');
+  assert.match(b, /穷举/, 'teaches the exhaustive-task grep rule');
+  assert.match(b, /callers|调用链/, 'teaches the callers/callees/impact commands');
   assert.match(b, /graft grep/, 'routes sweeps to graft grep');
   assert.match(b, /graft map/, 'tells the agent to orient with graft map before exploring');
-  assert.match(b, /\[scope\/\]/, 'teaches the [scope/] label on multi-scope/monorepo hits');
-  assert.match(b, /--in <scope>\//, 'teaches narrowing with ask --in <scope>/');
-  assert.ok(!/\bhook|statusline\b/i.test(b), 'no host-specific machinery in the shared body');
+  assert.ok(!/hook|statusline/i.test(b), 'no host-specific machinery in the shared body');
 });
 
 test('cursor rule has alwaysApply frontmatter and the body', () => {

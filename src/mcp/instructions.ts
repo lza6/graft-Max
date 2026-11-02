@@ -41,19 +41,21 @@ export function toolSearchQuery(prefix = `mcp__${brand()}__`): string {
 
 /** Under trail, the same text with trail's tool names (see brand.ts `inBrand`). */
 export function mcpInstructions(): string {
-  return inBrand([
-    'This repo is indexed by graft: a prebuilt graph of every symbol, its file:line',
-    'span, and who calls what. Prefer these tools over grep/read — one call usually',
-    'replaces several file reads.',
+  // [graft-Max] 中文指令块（<1000 字符红线不变）。工具名经 inMax 变 max_*。
+  const q = toolSearchQuery().replaceAll('graft_', 'max_');
+  return [
+    '本仓库已被 graft-Max 索引：符号图谱（file:line 精确区间 + 调用关系）。查代码',
+    '优先用这些工具，一次调用顶多次 grep/read。',
     '',
-    `**If these tools are deferred (names shown, schemas withheld), load them all in ONE lookup:** ToolSearch "${toolSearchQuery()}" — one round trip for the whole session. Never load them one at a time.`,
+    `**若工具被延迟加载（只见名字）：一次全部加载** ToolSearch "${q}"——整个会话只此一次。`,
     '',
-    '- graft_find_code — "how does X work" / "where is Y": ranked hits, code inlined.',
-    '- graft_find_all — when you need EVERY occurrence; find_code is top-N and misses some.',
-    '- graft_trace_calls — who calls it, what it calls, blast radius before a rename.',
-    '- graft_file_api — a file\'s whole API in ~200 tokens.',
-    '- graft_repo_map — orientation in an unfamiliar repo.',
+    '- max_find_code — "X 怎么实现/Y 在哪"：排序命中+内联代码。',
+    '- max_find_all — 穷举搜索（find_code 是 top-N 会漏）。',
+    '- max_trace_calls — 调用链/爆炸半径，重命名前必跑。',
+    '- max_file_api — 一个文件的全部 API（~200 token）。',
+    '- max_repo_map — 陌生仓库导航。',
+    '- max_find_docs / max_trace_arch — 文档检索 / 架构依赖链（联邦工具）。',
     '',
-    'Results already reflect uncommitted edits — the graph refreshes before each query.',
-  ].join('\n'));
+    '结果已反映未提交编辑——每次查询前图谱自动刷新。',
+  ].join('\n');
 }

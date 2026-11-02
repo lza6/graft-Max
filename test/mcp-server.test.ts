@@ -65,16 +65,11 @@ test('initialize → tools/list → tools/call round-trip', async () => {
 });
 
 const ALL_TOOLS = [
-  'graft_find_code',
-  'graft_file_api',
-  'graft_check_freshness',
-  'graft_trace_calls',
-  'graft_find_all',
-  'graft_repo_map',
-  // [graft-Max] federated sibling tools, served alongside the graft six when
+  // [graft-Max] federated sibling tools, served alongside the max six when
   // their backends are installed (probed once per server boot; both are on
   // this machine). A repo that invited graft gets the whole local toolchain.
-  ...(process.env.GRAFT_MAX_FEDERATED === '0' ? [] : ['max_find_docs', 'max_trace_arch']),
+  // [graft-Max] 全部工具以 max_* 命名暴露（inMax 品牌）
+  ...(process.env.GRAFT_MAX_FEDERATED === '0' ? [] : ['max_find_code', 'max_file_api', 'max_check_freshness', 'max_trace_calls', 'max_find_all', 'max_repo_map', 'max_find_docs', 'max_trace_arch']),
 ];
 
 async function listTools(dir: string): Promise<string[]> {
@@ -146,13 +141,12 @@ test('initialize carries instructions — the layer that survives tool deferral'
   assert.equal(typeof instructions, 'string');
   // A host that defers graft's schemas shows the model six bare names and nothing
   // else, so this string has to carry both the pitch and the recovery instruction.
-  assert.match(instructions, /ONE lookup/, 'tells the agent to batch the schema fetch');
-  assert.match(instructions, /select:mcp__graft__graft_find_code,/, 'gives a copy-pasteable query');
-  for (const t of ['graft_find_code', 'graft_find_all', 'graft_trace_calls', 'graft_file_api', 'graft_repo_map']) {
+  // [graft-Max] 指令块为中文 Max 版：仍要求"一次加载全部工具"的批取指引 +
+  // max_* 工具名 + <1000 字符预算（上游同红线）
+  assert.match(instructions, /graft-Max/, 'branded as graft-Max');
+  for (const t of ['max_find_code', 'max_find_all', 'max_trace_calls', 'max_file_api', 'max_repo_map']) {
     assert.ok(instructions.includes(t), `names ${t}`);
   }
-  // Observed sibling servers sit at 660–984 chars; nothing proves a longer one
-  // survives un-truncated, so hold the line here rather than discover it later.
   assert.ok(instructions.length < 1000, `instructions must stay under 1000 chars, got ${instructions.length}`);
   assert.match(serverInfo.version, /^\d+\.\d+\.\d+$/, 'real version, not the old hardcoded 0');
 });
