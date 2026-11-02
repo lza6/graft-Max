@@ -10,7 +10,7 @@ import { mainWorktreeRoot } from '../graph/seed.js';
 import { runUpkeep } from '../upkeep-run.js';
 import { runningVersion } from '../upkeep.js';
 import { maybeFlushInBackground, track } from '../telemetry/index.js';
-import { brand, inBrand } from '../brand.js';
+import { brand, inBrand, inMax, isMax, MAX_BRAND_ENV } from '../brand.js';
 import { canonicalToolName, GRAFT_MCP_TOOL_NAMES } from './tool-names.js';
 import { WorkspaceConnector, type RemotePrompt, type RemoteTool } from './connector.js';
 import { teamLine, teamWorkspace } from '../cloud/team-file.js';
@@ -119,6 +119,10 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
   const upkeep = brainsOnly ? [] : runUpkeep(root, runningVersion()).lines;
   // [graft-Max] developer log: boot line with everything a debugging session needs.
   dlog(`=== graft-Max MCP server boot === root=${root} brainsOnly=${brainsOnly} version=${version} pid=${process.pid} federated=on log=${logPath()}`);
+  // [graft-Max] identity marker for this process tree: tool names render as
+  // max_*, hooks/children inherit it. Set BEFORE anything reads brand().
+  if (isMax()) process.env[MAX_BRAND_ENV] = '1';
+  else process.env[MAX_BRAND_ENV] = '1'; // Max 二进制默认即 Max 身份
   registerSession(root, version);
   // 自动注入/摘除全局提示词：Max 开着就在，切原版自动摘（配合 switch-mcp.py）
   if (process.env.GRAFT_MAX_MCP === '1') {
@@ -165,8 +169,10 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
   );
   if (!brainsOnly && (dirOverride !== undefined || hasGraftIndex(root) || !!mainWorktreeRoot(root))) void federated.refresh();
 
+  // [graft-Max] tool names render as max_* under the Max build
+  const nameFor = (n: string) => (isMax() ? inMax(n) : inBrand(n));
   const repoTools = () =>
-    (brainsOnly ? [] : advertised(root, dirOverride)).map((t) => ({ name: inBrand(t.name), description: inBrand(t.description), inputSchema: t.inputSchema }));
+    (brainsOnly ? [] : advertised(root, dirOverride)).map((t) => ({ name: nameFor(t.name), description: inMax(t.description), inputSchema: t.inputSchema }));
   /** Federated tools, gated on the same advertise decision as the graft tools. */
   const federatedTools = (): Promise<Awaited<ReturnType<typeof availableFederatedTools>>> =>
     brainsOnly || advertised(root, dirOverride).length === 0 ? Promise.resolve([]) : federated.get(deadline);
@@ -265,8 +271,29 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
       }
       case 'tools/call': {
         if (isNotification) return;
-        const name = String(params?.name ?? '');
+        let name = String(params?.name ?? '');
         const args = (params?.arguments ?? {}) as Record<string, unknown>;
+        // [graft-Max] name resolution order matters:
+        //   1. federated tools are natively max_* — route them FIRST, before
+        //      any rewriting (max_find_docs must NOT become graft_find_docs)
+        //   2. then max_find_code-style spellings map back to graft_* for the
+        //      repo graph tools
+        if (FEDERATED_TOOL_NAMES.has(name.toLowerCase())) {
+          const t0 = Date.now();
+          callFederatedTool(name, args, root).then(
+            (r) => {
+              dlogBlock(`<-- 工具返回（联邦）  ${name}  ${Date.now() - t0}ms  isError=${r?.isError}`, r?.text ?? 'unknown tool');
+              reply(id, r ? { content: [{ type: 'text', text: r.text }], isError: r.isError } : { content: [{ type: 'text', text: `unknown tool: ${name}` }], isError: true });
+            },
+            (err) => {
+              dlog(`<-- 工具返回（联邦）  ${name}  REJECTED: ${err instanceof Error ? err.message : String(err)}`);
+              replyError(id, -32603, err instanceof Error ? err.message : String(err));
+            },
+          );
+          return;
+        }
+        const maxed = name.replace(/^max_/, 'graft_');
+        if (maxed !== name && !isRepoTool(name)) name = maxed;
         if (!isRepoTool(name) && (paired || brainsOnly)) {
           // The workspace's: passed to it as is. Never throws.
           workspace.callTool(name, args).then((r) => reply(id, r));
@@ -274,22 +301,6 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         }
         if (brainsOnly) {
           reply(id, { content: [{ type: 'text', text: `this server answers your Trail workspace's tools only; ${name} isn't one` }], isError: true });
-          return;
-        }
-        // [graft-Max] federated sibling tools (max_*) — proxied before the repo
-        // graph path. Never throws; every failure comes back as isError content.
-        if (FEDERATED_TOOL_NAMES.has(name.toLowerCase())) {
-          const t0 = Date.now();
-          callFederatedTool(name, args, root).then(
-            (r) => {
-              dlogBlock(`<-- tools/call (federated)  ${name}  ${Date.now() - t0}ms  isError=${r?.isError}`, r?.text ?? 'unknown tool');
-              reply(id, r ? { content: [{ type: 'text', text: r.text }], isError: r.isError } : { content: [{ type: 'text', text: `unknown tool: ${name}` }], isError: true });
-            },
-            (err) => {
-              dlog(`<-- tools/call (federated)  ${name}  ${Date.now() - t0}ms  REJECTED: ${err instanceof Error ? err.message : String(err)}`);
-              replyError(id, -32603, err instanceof Error ? err.message : String(err));
-            },
-          );
           return;
         }
         // Async because a tool call may rebuild the graph first (see

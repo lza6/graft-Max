@@ -35,7 +35,7 @@ try {
 
 // PHASE 2: three real tool calls (graft + qmd + gitnexus)
 send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
-send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'graft_repo_map', arguments: {} } });
+send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'max_repo_map', arguments: {} } });
 setTimeout(() => send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'max_find_docs', arguments: { query: 'graft-Max dashboard' } } }), 800);
 setTimeout(() => send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'max_trace_arch', arguments: { query: 'entry point' } } }), 2000);
 

@@ -62,7 +62,7 @@ rec('initialize', r.result?.serverInfo?.name === 'graft', JSON.stringify(r.resul
 // 2) tools/list — expect graft_* six + max_find_docs + max_trace_arch
 r = await rpc('tools/list', {}, 2);
 const names = (r.result?.tools ?? []).map((t) => t.name);
-rec('tools/list has graft six', ['graft_find_code','graft_find_all','graft_trace_calls','graft_file_api','graft_repo_map','graft_check_freshness'].every((n) => names.includes(n)), names.join(','));
+rec('tools/list has graft six', ['max_find_code','max_find_all','max_trace_calls','max_file_api','max_repo_map','max_check_freshness'].every((n) => names.includes(n)), names.join(','));
 rec('tools/list has max_find_docs (qmd probed OK)', names.includes('max_find_docs'), names.includes('max_find_docs') ? 'present' : 'MISSING');
 rec('tools/list has max_trace_arch (gitnexus probed OK)', names.includes('max_trace_arch'), names.includes('max_trace_arch') ? 'present' : 'MISSING');
 
@@ -84,11 +84,11 @@ rec('max_find_docs empty query → soft isError', r.result?.isError === true, (r
 
 // 6) graft tools still work through the same server (no regression)
 const tA = Date.now();
-r = await rpc('tools/call', { name: 'graft_find_code', arguments: { query: 'federation proxy tools', limit: 3 } }, 6);
+r = await rpc('tools/call', { name: 'max_find_code', arguments: { query: 'federation proxy tools', limit: 3 } }, 6);
 rec('graft_find_code still works', r.result !== undefined && !r.result.isError, (r.result?.content?.[0]?.text ?? '').slice(0, 100), Date.now() - tA);
 
 // 7) legacy alias still resolves
-r = await rpc('tools/call', { name: 'graft_ask', arguments: { query: 'mcp server', limit: 2 } }, 7);
+r = await rpc('tools/call', { name: 'max_ask', arguments: { query: 'mcp server', limit: 2 } }, 7);
 rec('legacy alias graft_ask still works', r.result !== undefined, `isError=${r.result?.isError}`, Date.now() - tA);
 
 child.kill('SIGKILL');

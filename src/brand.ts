@@ -38,7 +38,11 @@ export const PACKAGE_FOR: Record<Brand, string> = {
  */
 export const MAX_BRAND_ENV = "GRAFT_MAX_INVOKED_AS";
 export function isMax(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env[MAX_BRAND_ENV] === "graft-max" || env[BRAND_ENV] === "graft-max";
+  return (
+    env[MAX_BRAND_ENV] === "graft-max" ||
+    env[BRAND_ENV] === "graft-max" ||
+    env[MAX_BRAND_ENV] === "1"
+  );
 }
 
 export function brand(env: NodeJS.ProcessEnv = process.env): Brand {
@@ -295,4 +299,17 @@ export function trailHandoverLine(input: { env?: NodeJS.ProcessEnv; home?: strin
     "· graft is now Trail-code: the same code map under the `trail` command, plus learnings everyone working in the repo shares in .trail/. " +
     "Tell the user once, in a line at the end of your first reply, that `graft upgrade` adds it and graft keeps working."
   );
+}
+
+/**
+ * [graft-Max] The Max spelling: `graft_find_code` -> `max_find_code`, and the
+ * word graft -> graft-Max. Applied to tool names in tools/list and to prose
+ * when the server is running as the Max build, so an agent sees max_find_code
+ * and can tell at a glance it is talking to Max, not upstream graft.
+ */
+export function inMax(text: string): string {
+  return text
+    .replace(/\bgraft_(?=[a-z])/g, "max_")
+    .replace(/\bgraft\b(?![/\/\w-])/g, "graft-Max");
+
 }
