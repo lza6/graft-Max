@@ -18,7 +18,8 @@ import { KeptListing, within } from './kept-listing.js';
 // [graft-Max] sibling-tool federation: qmd/gitnexus proxied through this server.
 import { availableFederatedTools, callFederatedTool, FEDERATED_TOOL_NAMES } from './federation.js';
 // [graft-Max] developer log (GRAFT_MAX_LOG=1 or a path; default ~/.graft-max/mcp.log)
-import { dlog, dlogBlock, clip, logPath } from './devlog.js';
+import { dlog, dlogBlock, clip, logPath, registerSession, endSession, bumpRequests } from './devlog.js';
+import { startDashboard } from './dashboard.js';
 
 /**
  * MCP tool name → the command enum the telemetry contract knows. A tool absent
@@ -116,6 +117,8 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
   const upkeep = brainsOnly ? [] : runUpkeep(root, runningVersion()).lines;
   // [graft-Max] developer log: boot line with everything a debugging session needs.
   dlog(`=== graft-Max MCP server boot === root=${root} brainsOnly=${brainsOnly} version=${version} pid=${process.pid} federated=on log=${logPath()}`);
+  registerSession(root, version);
+  startDashboard();
   for (const line of upkeep) console.error(line);
   // Same deal for the telemetry queue: flushed from a detached child at boot, so
   // a Cursor user who never touches the CLI still gets their events out.
@@ -173,8 +176,10 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
     const { id, method, params } = msg;
     const isNotification = id === undefined;
     // [graft-Max] log every inbound request (args clipped to keep the log usable)
-    if (method === 'tools/call') dlogBlock(`--> tools/call  id=${String(id)}  name=${String(params?.name ?? '')}`, JSON.stringify(params?.arguments ?? {}, null, 1));
-    else dlog(`<-- ${method}  id=${String(id)}${isNotification ? ' (notification)' : ''}`);
+    if (method === 'tools/call') {
+      dlogBlock(`--> tools/call  id=${String(id)}  name=${String(params?.name ?? '')}`, JSON.stringify(params?.arguments ?? {}, null, 1));
+      bumpRequests();
+    } else dlog(`<-- ${method}  id=${String(id)}${isNotification ? ' (notification)' : ''}`);
     const paired = workspace.connected();
     switch (method) {
       case 'initialize': {
@@ -307,5 +312,9 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         if (!isNotification) replyError(id, -32601, `method not found: ${method}`);
     }
   });
-  process.stdin.on('end', () => process.exit(0));
+  process.stdin.on('end', () => {
+    dlog(`=== graft-Max MCP server exit === pid=${process.pid}`);
+    endSession();
+    process.exit(0);
+  });
 }

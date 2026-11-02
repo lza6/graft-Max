@@ -1,60 +1,60 @@
 {
-  "when": "2026-11-02T20:09:07.141Z",
+  "when": "2026-11-02T20:24:39.820Z",
   "server": "D:\\自研工具\\graft-Max\\dist\\cli.js",
-  "root": "C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code",
+  "root": "D:/自研工具/graft-Max",
   "results": [
     {
       "name": "initialize",
       "ok": true,
-      "ms": 889,
+      "ms": 935,
       "detail": "{\"name\":\"graft\",\"version\":\"0.28.0-max.1\"}"
     },
     {
       "name": "tools/list has graft six",
       "ok": true,
-      "ms": 1170,
+      "ms": 1202,
       "detail": "graft_find_code,graft_file_api,graft_check_freshness,graft_trace_calls,graft_find_all,graft_repo_map,max_find_docs,max_trace_arch"
     },
     {
       "name": "tools/list has max_find_docs (qmd probed OK)",
       "ok": true,
-      "ms": 1170,
+      "ms": 1202,
       "detail": "present"
     },
     {
       "name": "tools/list has max_trace_arch (gitnexus probed OK)",
       "ok": true,
-      "ms": 1170,
+      "ms": 1202,
       "detail": "present"
     },
     {
       "name": "max_find_docs real qmd search",
       "ok": true,
-      "ms": 316,
+      "ms": 311,
       "detail": "hits: 1, first: qmd://agentcode/README.md:344 #101e06\nTitle: Agent-Code\nScore:  81%\n\n@@ -343,4 @"
     },
     {
       "name": "max_trace_arch real gitnexus query",
       "ok": true,
-      "ms": 1257,
+      "ms": 1260,
       "detail": "isError=false, text: {\n  \"processes\": [],\n  \"process_symbols\": [],\n  \"definitions\": [\n    {\n      \"id\": \"File:README.md\",\n      \"name\": \"READ"
     },
     {
       "name": "max_find_docs empty query → soft isError",
       "ok": true,
-      "ms": 2744,
+      "ms": 2775,
       "detail": "max_find_docs requires a query"
     },
     {
       "name": "graft_find_code still works",
       "ok": true,
-      "ms": 61,
-      "detail": "graft ask — \"federation proxy tools\"  (empty)\n\nno matching nodes — try different words, or `graft bu"
+      "ms": 164,
+      "detail": "graft ask — \"federation proxy tools\"  (empty)\n\nno matching nodes across 4 workspace repo(s) — try di"
     },
     {
       "name": "legacy alias graft_ask still works",
       "ok": true,
-      "ms": 98,
+      "ms": 265,
       "detail": "isError=false"
     }
   ]
