@@ -20,6 +20,8 @@ import { availableFederatedTools, callFederatedTool, FEDERATED_TOOL_NAMES } from
 // [graft-Max] developer log (GRAFT_MAX_LOG=1 or a path; default ~/.graft-max/mcp.log)
 import { dlog, dlogBlock, clip, logPath, registerSession, endSession, bumpRequests } from './devlog.js';
 import { startDashboard } from './dashboard.js';
+// [graft-Max] 全局提示词注入（GRAFT_MAX_MCP=1 时生效，切回原版即摘除）
+import { upsertGlobalPrompt, removeGlobalPrompt } from '../hosts/max-prompt.js';
 
 /**
  * MCP tool name → the command enum the telemetry contract knows. A tool absent
@@ -118,6 +120,13 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
   // [graft-Max] developer log: boot line with everything a debugging session needs.
   dlog(`=== graft-Max MCP server boot === root=${root} brainsOnly=${brainsOnly} version=${version} pid=${process.pid} federated=on log=${logPath()}`);
   registerSession(root, version);
+  // 自动注入/摘除全局提示词：Max 开着就在，切原版自动摘（配合 switch-mcp.py）
+  if (process.env.GRAFT_MAX_MCP === '1') {
+    const act = upsertGlobalPrompt();
+    dlog(`全局提示词${act === 'created' ? '已注入' : act === 'updated' ? '已更新' : '无变化'}: ${act}`);
+  } else {
+    if (removeGlobalPrompt()) dlog('全局提示词已摘除（GRAFT_MAX_MCP 未启用）');
+  }
   startDashboard();
   for (const line of upkeep) console.error(line);
   // Same deal for the telemetry queue: flushed from a detached child at boot, so

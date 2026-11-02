@@ -40,7 +40,7 @@ setTimeout(async () => {
     const tail = (await fetchLocal('http://127.0.0.1:24688/tail?n=50')).body;
     check('/tail has timestamped lines', tail.split('\n').some((l) => /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(l)), tail.split('\n').find((l) => /^\[/.test(l))?.slice(0, 90));
     const page = (await fetchLocal('http://127.0.0.1:24688/')).body;
-    check('/ HTML page', page.includes('graft-Max Dashboard') && page.includes('Live sessions'), `${page.length} bytes`);
+    check('/ HTML page (new design)', page.includes('graft-Max Dashboard') && page.includes('toggleTheme') && page.includes('活跃会话'), `${page.length} bytes`);
   } catch (e) {
     check('dashboard reachable', false, e.message);
   }

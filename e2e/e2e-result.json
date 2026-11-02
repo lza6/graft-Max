@@ -1,48 +1,48 @@
 {
-  "when": "2026-11-02T21:03:30.455Z",
+  "when": "2026-11-02T21:53:00.212Z",
   "server": "D:\\自研工具\\graft-Max\\dist\\cli.js",
   "root": "D:/自研工具/graft-Max",
   "results": [
     {
       "name": "initialize",
       "ok": true,
-      "ms": 859,
+      "ms": 822,
       "detail": "{\"name\":\"graft\",\"version\":\"0.28.0-max.1\"}"
     },
     {
       "name": "tools/list has graft six",
       "ok": true,
-      "ms": 1110,
+      "ms": 1069,
       "detail": "graft_find_code,graft_file_api,graft_check_freshness,graft_trace_calls,graft_find_all,graft_repo_map,max_find_docs,max_trace_arch"
     },
     {
       "name": "tools/list has max_find_docs (qmd probed OK)",
       "ok": true,
-      "ms": 1110,
+      "ms": 1069,
       "detail": "present"
     },
     {
       "name": "tools/list has max_trace_arch (gitnexus probed OK)",
       "ok": true,
-      "ms": 1110,
+      "ms": 1069,
       "detail": "present"
     },
     {
       "name": "max_find_docs real qmd search",
       "ok": true,
-      "ms": 307,
+      "ms": 285,
       "detail": "hits: 1, first: qmd://agentcode/README.md:344 #101e06\nTitle: Agent-Code\nScore:  81%\n\n@@ -343,4 @"
     },
     {
       "name": "max_trace_arch real gitnexus query",
       "ok": true,
-      "ms": 1240,
+      "ms": 1260,
       "detail": "isError=false, text: {\n  \"processes\": [],\n  \"process_symbols\": [],\n  \"definitions\": [\n    {\n      \"id\": \"File:README.md\",\n      \"name\": \"READ"
     },
     {
       "name": "max_find_docs empty query → soft isError",
       "ok": true,
-      "ms": 2659,
+      "ms": 2617,
       "detail": "max_find_docs requires a query"
     },
     {
@@ -54,7 +54,7 @@
     {
       "name": "legacy alias graft_ask still works",
       "ok": true,
-      "ms": 82,
+      "ms": 84,
       "detail": "isError=false"
     }
   ]

@@ -1,7 +1,7 @@
 /**
  * LIVE-SCENARIO E2E — simulates exactly what the user will see in their next
  * Claude Code session: graft-Max starts (log+UI on), the agent makes several
- * tool calls, and the dashboard at http://127.0.0.1:24688 shows
+ * tool calls, and the dashboard at http://127.0.0.1:24698 shows
  *   1. the live session row (pid / host / repo / request count growing)
  *   2. real-time log lines for every call
  * Probes the dashboard BEFORE, DURING, and AFTER tool calls.
@@ -10,14 +10,14 @@ import { spawn } from 'node:child_process';
 import { get } from 'node:http';
 import { fileURLToPath } from 'node:url';
 
-const getJson = (p) => new Promise((res, rej) => get(`http://127.0.0.1:24688${p}`, r => { let b=''; r.on('data',d=>b+=d); r.on('end',()=>res(JSON.parse(b))); }).on('error', rej));
-const getText = (p) => new Promise((res, rej) => get(`http://127.0.0.1:24688${p}`, r => { let b=''; r.on('data',d=>b+=d); r.on('end',()=>res(b)); }).on('error', rej));
+const getJson = (p) => new Promise((res, rej) => get(`http://127.0.0.1:24698${p}`, r => { let b=''; r.on('data',d=>b+=d); r.on('end',()=>res(JSON.parse(b))); }).on('error', rej));
+const getText = (p) => new Promise((res, rej) => get(`http://127.0.0.1:24698${p}`, r => { let b=''; r.on('data',d=>b+=d); r.on('end',()=>res(b)); }).on('error', rej));
 
 const results = [];
 const check = (name, ok, detail='') => { results.push(ok); console.log(`${ok?'PASS':'FAIL'}  ${name}  ${String(detail).slice(0,140)}`); };
 
 const c = spawn(process.execPath, [fileURLToPath(new URL('../dist/cli.js', import.meta.url)), 'mcp', 'C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code'], {
-  env: { ...process.env, GRAFT_MAX_LOG: '1', GRAFT_MAX_UI: '1' }, windowsHide: true,
+  env: { ...process.env, GRAFT_MAX_LOG: '1', GRAFT_MAX_UI: '24698' }, windowsHide: true,
 });
 c.stderr.on('data', () => {});
 const send = (o) => c.stdin.write(JSON.stringify(o) + '\n');
@@ -47,13 +47,13 @@ try {
   const tail = await getText('/tail?n=60');
   check('P3 log shows max_find_docs call', tail.includes('max_find_docs'), '');
   check('P3 log shows max_trace_arch call', tail.includes('max_trace_arch'), '');
-  check('P3 log shows qmd child spawn', tail.includes('[fed] qmd spawn'), '');
-  check('P3 log shows gitnexus child spawn', tail.includes('[fed] gitnexus spawn'), '');
+  check('P3 log shows qmd child spawn', tail.includes('[联邦] qmd 子进程启动'), '');
+  check('P3 log shows gitnexus child spawn', tail.includes('[联邦] gitnexus 子进程启动'), '');
   const st = await getJson('/stats');
   check('P3 stats requests match', st.requests >= 3, `stats.requests=${st.requests}`);
 } catch (e) { check('P3 dashboard reflects activity', false, e.message); }
 
 c.kill();
 const pass = results.filter(Boolean).length;
-console.log(`\n== LIVE-SCENARIO: ${pass}/${results.length} passed — this is what http://127.0.0.1:24688 shows in your next session`);
+console.log(`\n== LIVE-SCENARIO: ${pass}/${results.length} passed — this is what http://127.0.0.1:24698 shows in your next session`);
 process.exit(pass === results.length ? 0 : 1);

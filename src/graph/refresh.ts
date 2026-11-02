@@ -133,7 +133,18 @@ function startFirstBuild(dir: string): boolean {
  * is now there and the query should go on, or what to answer with when it isn't.
  */
 async function buildMissingMap(dir: string, outDir: string, opts: RefreshOptions, busy?: boolean): Promise<string | RefreshResult> {
-  const own = !opts.contextDir && !process.env.GRAFT_DIR && isTrailMapDir(dir, outDir) && homeFolderRefusal(dir) === null;
+  // [graft-Max] Upstream auto-builds only a trail map dir (`.trail/cache`) — a
+  // graft-layout repo (`graft/`) was expected to run `graft build` by hand. That
+  // hand step is exactly what Max removes: any real repo (not ~, not an
+  // explicit --dir) gets its map built on first query, trail OR graft layout.
+  // The home-folder refusal and contextDir/GRAFT_DIR escapes stay: those mark
+  // "the user pointed somewhere that is not a repo", and auto-building there
+  // would litter maps across arbitrary directories.
+  const own =
+    !opts.contextDir &&
+    !process.env.GRAFT_DIR &&
+    homeFolderRefusal(dir) === null &&
+    (isTrailMapDir(dir, outDir) || process.env.GRAFT_MAX_MCP === '1');
   if (!own) {
     return busy
       ? { refreshed: false, note: "another process is still copying the graph into this worktree — retry the query in a moment" }

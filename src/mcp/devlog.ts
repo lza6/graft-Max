@@ -98,9 +98,41 @@ async function write(line: string): Promise<void> {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// [graft-Max] 汉化层：日志行写盘前把已知英文模式替换成中文（开发者友好）。
+// 工具名/路径/参数保持原样——只有"动作描述"被翻译，不影响 grep 工具名。
+// ---------------------------------------------------------------------------
+const I18N: Array<[RegExp, string]> = [
+  [/=== graft-Max MCP server boot ===/, '=== graft-Max MCP 服务启动 ==='],
+  [/=== graft-Max MCP server exit \(stdin leash: silent 10min\) ===/, '=== graft-Max MCP 服务退出（stdin 沉默10分钟，看门狗触发）==='],
+  [/=== graft-Max MCP server exit ===/, '=== graft-Max MCP 服务退出 ==='],
+  [/^session registered: pid=(\d+) host=(\d+) root=(.*) version=(.*)$/, '会话注册: pid=$1 宿主pid=$2 仓库=$3 版本=$4'],
+  [/^dashboard: (http:\/\/127\.0\.0\.1:\d+) \(tail \/ sessions \/ stats\)$/, '面板已启动: $1 （实时日志 / 会话表 / 统计）'],
+  [/^dashboard: port (\d+) busy — UI not started \(MCP unaffected\)$/, '面板端口 $1 被占用 — UI 未启动（MCP 不受影响）'],
+  [/^log rotated at (\d+) bytes/, '日志已滚动（超过5MB）: $1 字节'],
+  [/^--> tools\/call  id=(\S+)  name=(\S+)$/, '--> 工具调用  请求id=$1  工具=$2'],
+  [/^<-- tools\/call \(federated\)/, '<-- 工具返回（联邦）'],
+  [/^<-- tools\/call \(graft\)/, '<-- 工具返回（graft）'],
+  [/^<-- tools\/list  id=(\S+)  ->  $/, '<-- 工具列表返回  id=$1 ->（空，仓库未建图）'],
+  [/^<-- tools\/list  id=(\S+)  ->  /, '<-- 工具列表返回  id=$1 -> '],
+  [/^<-- (\S+)  id=(\S+) \(notification\)$/, '<-- 收到 $1  id=$2（通知）'],
+  [/^<-- (\S+)  id=(\S+)$/, '<-- 收到请求 $1  id=$2'],
+  [/^\[fed\] qmd spawn: /, '[联邦] qmd 子进程启动: '],
+  [/^\[fed\] qmd done ok=(\S+) out="(.*)" err="(.*)"$/, '[联邦] qmd 完成 成功=$1 输出="$2" 错误="$3"'],
+  [/^\[fed\] gitnexus spawn \(cwd=(.*)\) query="(.*)"$/, '[联邦] gitnexus 子进程启动（仓库=$1）查询="$2"'],
+  [/^\[fed\] gitnexus session: /, '[联邦] gitnexus 会话分步: '],
+  [/^\[fed\] gitnexus answered /, '[联邦] gitnexus 返回 '],
+];
+function i18n(line: string): string {
+  let out = line;
+  for (const [re, rep] of I18N) out = out.replace(re, rep);
+  return out;
+}
+
 export function dlog(msg: string): void {
   if (!enabled) return;
-  void write(`[${stamp()}] ${msg}`);
+  void write(`[${stamp()}] ${i18n(msg)}`);
 }
 
 export function dlogBlock(title: string, body: string): void {
