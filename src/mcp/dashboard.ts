@@ -125,7 +125,7 @@ tr:last-child td{border-bottom:none}
 </div>
 <script>
 let timer=null;
-function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function esc(s){return s.split('&').join('&amp;').split('<').join('&lt;')}
 function toggleTheme(){const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'}
 async function loadSessions(){
   try{const rows=await (await fetch('/sessions')).json();
@@ -133,7 +133,7 @@ async function loadSessions(){
   const tb=document.querySelector('#sess tbody');tb.innerHTML='';
   if(!rows.length){tb.innerHTML='<tr><td colspan=7 class=muted>没有活跃会话（MCP server 未启动或已退出）</td></tr>';return}
   for(const s of rows){tb.insertAdjacentHTML('beforeend',
-    '<tr><td class=live>● LIVE</td><td class=mono>' + s.pid + '</td><td>' + esc(s.user) + '</td><td class=mono>' + esc(s.cwd) + '</td><td class=muted>' + (s.hostPid ?? '?') + ' <span class=muted>' + esc((s.hostCmd || '').split('/').pop() || '') + '</span></td><td>' + s.requests + '</td><td class=muted>' + new Date(s.startedAt).toLocaleString('zh-CN') + '</td></tr>'
+    '<tr><td class=live>● LIVE</td><td class=mono>' + s.pid + '</td><td>' + esc(s.user) + '</td><td class=mono>' + esc(s.cwd) + '</td><td class=muted>' + (s.hostPid ?? '?') + ' <span class=muted>' + esc((s.hostCmd || '').split('/').pop() || '') + '</span></td><td>' + s.requests + '</td><td class=muted>' + new Date(s.startedAt).toLocaleString('zh-CN') + '</td></tr>' ) }
   }catch(e){document.getElementById('cSessions').textContent='–'}
 }
 async function loadStats(){
@@ -147,7 +147,7 @@ async function poll(force){
   try{
     const t=await (await fetch('/tail?n=300')).text();
     const atBottom=el.scrollTop+el.clientHeight>=el.scrollHeight-40;
-    el.innerHTML=t.split('\n').map(l=>{
+    el.innerHTML=t.split('\\n').map(l=>{
       let cls='';
       if(l.includes('isError=true'))cls='err';
       else if(l.includes('[联邦]')||l.includes('[fed]'))cls='fed';
