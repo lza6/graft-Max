@@ -24,6 +24,7 @@
  *     aliases and trail_* names keep resolving as before.
  */
 import { spawn } from 'node:child_process';
+import { dlog, clip } from './devlog.js';
 
 /** One proxied tool, in the shape ./tools.ts's ToolDef expects. */
 export interface FederatedToolDef {
@@ -168,7 +169,10 @@ async function runQmdSearch(args: Record<string, unknown>): Promise<{ text: stri
   const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) && args.limit >= 1 ? Math.floor(args.limit) : 5;
   const cArgs = ['search', query, '-n', String(limit)];
   if (typeof args.collection === 'string' && args.collection) cArgs.push('-c', args.collection);
+  dlog(`[fed] qmd spawn: qmd ${cArgs.join(' ')}`);
   const r = await runCli('qmd', cArgs, 30_000);
+  const flat = (s: string) => s.replaceAll('\n', ' ⏎ ');
+  dlog(`[fed] qmd done ok=${r.ok} out="${flat(clip(r.out, 200))}" err="${flat(clip(r.err, 150))}"`);
   if (!r.ok && !r.out.trim()) {
     // A nonzero exit WITH output can still be useful (qmd warns on stderr);
     // only a truly empty answer is a failure worth an install hint.
@@ -253,10 +257,12 @@ async function runGitnexusQuery(args: Record<string, unknown>, cwd: string): Pro
           : { text: 'gitnexus produced no output — is it installed? ' + GITNEXUS.installHint, isError: true },
       );
     });
+    dlog(`[fed] gitnexus spawn (cwd=${cwd}) query="${clip(query, 100)}"`);
     write(initReq, 0);
     write(note, 300);
     write(listReq, 600);
     write(callReq, 900);
+    dlog('[fed] gitnexus session: init@0ms note@300ms list@600ms call@900ms');
   });
 }
 

@@ -17,6 +17,8 @@ import { teamLine, teamWorkspace } from '../cloud/team-file.js';
 import { KeptListing, within } from './kept-listing.js';
 // [graft-Max] sibling-tool federation: qmd/gitnexus proxied through this server.
 import { availableFederatedTools, callFederatedTool, FEDERATED_TOOL_NAMES } from './federation.js';
+// [graft-Max] developer log (GRAFT_MAX_LOG=1 or a path; default ~/.graft-max/mcp.log)
+import { dlog, dlogBlock, clip, logPath } from './devlog.js';
 
 /**
  * MCP tool name → the command enum the telemetry contract knows. A tool absent
@@ -112,6 +114,8 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
   // `instructions` below — stdout is protocol-only, so there is nowhere else to
   // put them. Never blocks: the registry fetch happens in a detached child.
   const upkeep = brainsOnly ? [] : runUpkeep(root, runningVersion()).lines;
+  // [graft-Max] developer log: boot line with everything a debugging session needs.
+  dlog(`=== graft-Max MCP server boot === root=${root} brainsOnly=${brainsOnly} version=${version} pid=${process.pid} federated=on log=${logPath()}`);
   for (const line of upkeep) console.error(line);
   // Same deal for the telemetry queue: flushed from a detached child at boot, so
   // a Cursor user who never touches the CLI still gets their events out.
@@ -168,6 +172,9 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
     }
     const { id, method, params } = msg;
     const isNotification = id === undefined;
+    // [graft-Max] log every inbound request (args clipped to keep the log usable)
+    if (method === 'tools/call') dlogBlock(`--> tools/call  id=${String(id)}  name=${String(params?.name ?? '')}`, JSON.stringify(params?.arguments ?? {}, null, 1));
+    else dlog(`<-- ${method}  id=${String(id)}${isNotification ? ' (notification)' : ''}`);
     const paired = workspace.connected();
     switch (method) {
       case 'initialize': {
@@ -205,7 +212,10 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
           // [graft-Max] federated sibling tools ride along, but ONLY when the
           // repo invited graft (advertised() non-empty) — same budget rule.
           federatedTools().then(
-            (f) => reply(id, { tools: [...local, ...(f ?? [])] }),
+            (f) => {
+              dlog(`<-- tools/list  id=${String(id)}  ->  ${[...local, ...(f ?? [])].map((t) => t.name).join(', ')}`);
+              reply(id, { tools: [...local, ...(f ?? [])] });
+            },
             () => reply(id, { tools: local }),
           );
           return;
@@ -255,9 +265,16 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         // [graft-Max] federated sibling tools (max_*) — proxied before the repo
         // graph path. Never throws; every failure comes back as isError content.
         if (FEDERATED_TOOL_NAMES.has(name.toLowerCase())) {
+          const t0 = Date.now();
           callFederatedTool(name, args, root).then(
-            (r) => reply(id, r ? { content: [{ type: 'text', text: r.text }], isError: r.isError } : { content: [{ type: 'text', text: `unknown tool: ${name}` }], isError: true }),
-            (err) => replyError(id, -32603, err instanceof Error ? err.message : String(err)),
+            (r) => {
+              dlogBlock(`<-- tools/call (federated)  ${name}  ${Date.now() - t0}ms  isError=${r?.isError}`, r?.text ?? 'unknown tool');
+              reply(id, r ? { content: [{ type: 'text', text: r.text }], isError: r.isError } : { content: [{ type: 'text', text: `unknown tool: ${name}` }], isError: true });
+            },
+            (err) => {
+              dlog(`<-- tools/call (federated)  ${name}  ${Date.now() - t0}ms  REJECTED: ${err instanceof Error ? err.message : String(err)}`);
+              replyError(id, -32603, err instanceof Error ? err.message : String(err));
+            },
           );
           return;
         }
@@ -265,8 +282,10 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         // graph/refresh.ts). `callTool` absorbs its own errors, so the only thing
         // that can reject here is a bug — surface it as a JSON-RPC error rather
         // than an unhandled rejection that kills the server.
+        const graftCallT0 = Date.now();
         callTool(root, name, args, dirOverride).then(
           (r) => {
+            dlogBlock(`<-- tools/call (graft)  ${name}  ${Date.now() - graftCallT0}ms  isError=${r.isError}`, r.text);
             // No `hit`: `isError` means the tool failed, which is not the same
             // question as "did the graph have an answer". Absent beats wrong.
             // hasOwn for the same reason as track()'s: a client is free to send
@@ -277,7 +296,10 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
             track('query', { command, surface: 'mcp' }, { repo: root, host: 'mcp' });
             reply(id, { content: [{ type: 'text', text: r.text }], isError: r.isError });
           },
-          (err) => replyError(id, -32603, err instanceof Error ? err.message : String(err)),
+          (err) => {
+            dlog(`<-- tools/call (graft)  ${name}  REJECTED: ${err instanceof Error ? err.message : String(err)}`);
+            replyError(id, -32603, err instanceof Error ? err.message : String(err));
+          },
         );
         return;
       }

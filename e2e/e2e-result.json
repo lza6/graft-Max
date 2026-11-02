@@ -1,60 +1,60 @@
 {
-  "when": "2026-11-02T19:28:50.816Z",
+  "when": "2026-11-02T20:09:07.141Z",
   "server": "D:\\自研工具\\graft-Max\\dist\\cli.js",
-  "root": "D:/自研工具/graft-Max",
+  "root": "C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code",
   "results": [
     {
       "name": "initialize",
       "ok": true,
-      "ms": 875,
+      "ms": 889,
       "detail": "{\"name\":\"graft\",\"version\":\"0.28.0-max.1\"}"
     },
     {
       "name": "tools/list has graft six",
       "ok": true,
-      "ms": 1137,
+      "ms": 1170,
       "detail": "graft_find_code,graft_file_api,graft_check_freshness,graft_trace_calls,graft_find_all,graft_repo_map,max_find_docs,max_trace_arch"
     },
     {
       "name": "tools/list has max_find_docs (qmd probed OK)",
       "ok": true,
-      "ms": 1137,
+      "ms": 1170,
       "detail": "present"
     },
     {
       "name": "tools/list has max_trace_arch (gitnexus probed OK)",
       "ok": true,
-      "ms": 1137,
+      "ms": 1170,
       "detail": "present"
     },
     {
       "name": "max_find_docs real qmd search",
       "ok": true,
-      "ms": 293,
+      "ms": 316,
       "detail": "hits: 1, first: qmd://agentcode/README.md:344 #101e06\nTitle: Agent-Code\nScore:  81%\n\n@@ -343,4 @"
     },
     {
       "name": "max_trace_arch real gitnexus query",
       "ok": true,
-      "ms": 1244,
+      "ms": 1257,
       "detail": "isError=false, text: {\n  \"processes\": [],\n  \"process_symbols\": [],\n  \"definitions\": [\n    {\n      \"id\": \"File:README.md\",\n      \"name\": \"READ"
     },
     {
       "name": "max_find_docs empty query → soft isError",
       "ok": true,
-      "ms": 2675,
+      "ms": 2744,
       "detail": "max_find_docs requires a query"
     },
     {
       "name": "graft_find_code still works",
       "ok": true,
-      "ms": 131,
-      "detail": "graft ask — \"federation proxy tools\"  (empty)\n\nno matching nodes across 4 workspace repo(s) — try di"
+      "ms": 61,
+      "detail": "graft ask — \"federation proxy tools\"  (empty)\n\nno matching nodes — try different words, or `graft bu"
     },
     {
       "name": "legacy alias graft_ask still works",
       "ok": true,
-      "ms": 230,
+      "ms": 98,
       "detail": "isError=false"
     }
   ]
