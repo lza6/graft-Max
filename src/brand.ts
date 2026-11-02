@@ -31,6 +31,16 @@ export const PACKAGE_FOR: Record<Brand, string> = {
   graft: "@nanonets/graft",
 };
 
+/**
+ * [graft-Max] Our self-developed fork marker. Distinct env value so child
+ * processes (hooks, background builds) know they are running the Max build.
+ * Behavior stays byte-compatible with graft; branding only.
+ */
+export const MAX_BRAND_ENV = "GRAFT_MAX_INVOKED_AS";
+export function isMax(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[MAX_BRAND_ENV] === "graft-max" || env[BRAND_ENV] === "graft-max";
+}
+
 export function brand(env: NodeJS.ProcessEnv = process.env): Brand {
   return env[BRAND_ENV] === "trail" ? "trail" : "graft";
 }

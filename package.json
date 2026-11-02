@@ -1,7 +1,7 @@
 {
-  "name": "@nanonets/graft",
-  "version": "0.28.0",
-  "description": "Build a repo's context graph as a folder of linked markdown files: a local, regenerable cache that every query keeps in sync with your code.",
+  "name": "graft-max",
+  "version": "0.28.0-max.1",
+  "description": "[graft-Max] Self-developed fork of graft (nanonets/graft v0.28.0) - repo context graph + planned unified MCP aggregation for our toolchain.",
   "keywords": [
     "ai",
     "agents",
