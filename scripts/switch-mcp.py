@@ -77,10 +77,14 @@ def set_graft(entry):
 
 def current():
     d = json.loads(io.open(CLAUDE, encoding='utf-8').read())
-    g = (d.get('mcpServers') or {}).get('graft')
+    servers = d.get('mcpServers') or {}
+    gm = servers.get('graft-max')
+    if gm and gm.get('command') == 'node': return 'max'   # Max 走独立 id
+    g = servers.get('graft')
     if not g: return 'none'
     if g.get('command') == 'node' and any('graft-Max' in a for a in g.get('args', [])): return 'max'
     return 'orig'
+
 
 def status():
     cur = current()
@@ -93,11 +97,27 @@ def status():
     except Exception:
         print('Dashboard: 未运行（GRAFT_MAX_UI=1 的会话启动时才会开）')
 
+def set_max():
+    d = json.loads(io.open(CLAUDE, encoding='utf-8').read())
+    servers = d.setdefault('mcpServers', {})
+    servers.pop('graft', None)          # 摘掉上游槽（避免双份 graft 工具）
+    servers['graft-max'] = MAX_ENTRY
+    save(d)
+    print('OK 已切到 graft-Max。新会话生效。'); status()
+
+def set_orig():
+    d = json.loads(io.open(CLAUDE, encoding='utf-8').read())
+    servers = d.setdefault('mcpServers', {})
+    servers.pop('graft-max', None)      # 摘掉 Max
+    servers['graft'] = ORIG_ENTRY
+    save(d)
+    print('OK 已切回原版 graft。新会话生效。'); status()
+
+def save(d):
+    tmp = CLAUDE + '.swaptmp'
+    io.open(tmp, 'w', encoding='utf-8').write(json.dumps(d, ensure_ascii=False, indent=2))
+    os.replace(tmp, CLAUDE)
+
 if __name__ == '__main__':
     m = sys.argv[1] if len(sys.argv) > 1 else 'status'
-    if m == 'max':
-        set_graft(MAX_ENTRY); print('OK 已切到 graft-Max。新会话生效。'); status()
-    elif m == 'orig':
-        set_graft(ORIG_ENTRY); print('OK 已切回原版 graft。新会话生效。'); status()
-    else:
-        status()
+    {'max': set_max, 'orig': set_orig, 'status': status}.get(m, lambda: print('用法: max|orig|status'))()
