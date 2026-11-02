@@ -317,4 +317,22 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
     endSession();
     process.exit(0);
   });
+  // [graft-Max] stdin-leash: on Windows a host crash can leave our stdin open
+  // forever (the 'end' event never fires), leaking the process AND its
+  // dashboard port. The leash exits when stdin has delivered nothing for 10
+  // minutes — an MCP host always writes within that window in a live session
+  // (tool calls, pings), and a dead one never does. Re-armed by every stdin
+  // byte via the readline 'line' handler above.
+  let lastStdin = Date.now();
+  rl.on('line', () => {
+    lastStdin = Date.now();
+  });
+  const leash = setInterval(() => {
+    if (Date.now() - lastStdin > 10 * 60_000) {
+      dlog(`=== graft-Max MCP server exit (stdin leash: silent 10min) === pid=${process.pid}`);
+      endSession();
+      process.exit(0);
+    }
+  }, 60_000);
+  leash.unref();
 }

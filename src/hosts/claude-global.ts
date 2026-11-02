@@ -126,6 +126,18 @@ export function installClaudeGlobal(home: string, brand: Brand = 'graft'): Globa
     out.push(dropUserServer(mcp.id, mcp.path, 'trail', isBrainsServer));
     return out;
   }
+  // [graft-Max] register under our OWN id ('graft-max'), never the upstream
+  // 'graft' slot — the two builds own separate entries and can't clobber each
+  // other. The Max entry only appears when GRAFT_MAX_MCP=1 (set by our init),
+  // so upstream's own `graft init` keeps behaving exactly as before.
+  if (process.env.GRAFT_MAX_MCP === '1') {
+    try {
+      out.push(mergeJsonKey('claude-global-mcp-max', mcp.path, 'mcpServers', serverEntry({ brand }), 'graft-max'));
+    } catch {
+      out.push({ id: 'claude-global-mcp-max', path: mcp.path, action: 'skipped-unparseable' });
+    }
+    return out;
+  }
   try {
     out.push(mergeJsonKey(mcp.id, mcp.path, 'mcpServers', serverEntry({ brand }), brand));
   } catch {

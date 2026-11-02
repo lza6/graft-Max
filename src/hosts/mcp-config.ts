@@ -10,6 +10,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import type { PlannedWrite } from './plan.js';
 import { readJsonObject, type ConfigWrite } from './config-write.js';
@@ -53,6 +54,17 @@ const BIN_LAUNCH = { command: 'graft', args: ['mcp'] };
 const TRAIL_NPX_LAUNCH = { command: 'npx', args: ['-y', '@trailhq/trail-code', 'mcp'] };
 const TRAIL_BIN_LAUNCH = { command: 'trail', args: ['mcp'] };
 
+/**
+ * [graft-Max] Our own launch forms. The Max build NEVER registers itself as
+ * `graft`/`@nanonets/graft`: those entries belong to the upstream install, and
+ * letting Max write them (or letting upstream's upkeep rewrite a Max entry)
+ * makes the two builds fight over one config slot. Max registers as the
+ * `graft-max` id with `node <abs dist/cli.js> mcp` — absolute because the Max
+ * build is a repo checkout, not an npm-global on PATH. Upstream stays free to
+ * register/repair its own `graft` entry; the two coexist.
+ */
+const MAX_LAUNCH = { command: 'node', args: [fileURLToPath(new URL('../../dist/cli.js', import.meta.url)), 'mcp'] };
+
 function graftOnPath(): boolean {
   const r = spawnSync('graft', ['--version'], { stdio: 'ignore', timeout: 5000 });
   return r.status === 0;
@@ -65,9 +77,14 @@ function graftOnPath(): boolean {
  * global install is stale or shadowed, and what the tests set so their expectations
  * don't depend on whether the machine running them happens to have graft installed.
  * `opts.onPath` is the same override for direct unit tests of both branches.
+ *
+ * [graft-Max] `GRAFT_MAX_MCP=1` (set by our own init/hook scripts) routes the
+ * entry decision to MAX_LAUNCH under the `graft-max` id — never the upstream
+ * slot. serverEntry callers that don't set it keep upstream behavior verbatim.
  */
 export function serverEntry(opts: { onPath?: boolean; brand?: 'graft' | 'trail' } = {}): { command: string; args: string[] } {
   const trail = opts.brand === 'trail';
+  if (process.env.GRAFT_MAX_MCP === '1') return MAX_LAUNCH;
   const forced = process.env.GRAFT_MCP_NPX;
   if (forced !== undefined && forced !== '' && forced !== '0' && forced !== 'false') return trail ? TRAIL_NPX_LAUNCH : NPX_LAUNCH;
   if (trail) return (opts.onPath ?? trailOnPath()) ? TRAIL_BIN_LAUNCH : TRAIL_NPX_LAUNCH;
