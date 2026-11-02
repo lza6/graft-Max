@@ -71,6 +71,10 @@ const ALL_TOOLS = [
   'graft_trace_calls',
   'graft_find_all',
   'graft_repo_map',
+  // [graft-Max] federated sibling tools, served alongside the graft six when
+  // their backends are installed (probed once per server boot; both are on
+  // this machine). A repo that invited graft gets the whole local toolchain.
+  ...(process.env.GRAFT_MAX_FEDERATED === '0' ? [] : ['max_find_docs', 'max_trace_arch']),
 ];
 
 async function listTools(dir: string): Promise<string[]> {

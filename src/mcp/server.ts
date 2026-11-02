@@ -15,6 +15,8 @@ import { canonicalToolName, GRAFT_MCP_TOOL_NAMES } from './tool-names.js';
 import { WorkspaceConnector, type RemotePrompt, type RemoteTool } from './connector.js';
 import { teamLine, teamWorkspace } from '../cloud/team-file.js';
 import { KeptListing, within } from './kept-listing.js';
+// [graft-Max] sibling-tool federation: qmd/gitnexus proxied through this server.
+import { availableFederatedTools, callFederatedTool, FEDERATED_TOOL_NAMES } from './federation.js';
 
 /**
  * MCP tool name → the command enum the telemetry contract knows. A tool absent
@@ -135,9 +137,23 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
     void prompts.refresh();
   }
 
-  /** The repo's tools this server lists, under trail as `trail_*` in trail's words. */
+  /** The repo's tools this server lists, under trail as `trail_*` in trail's words.
+   * [graft-Max] plus the federated sibling tools (max_find_docs / max_trace_arch),
+   * probed once at first tools/list — an uninstalled backend hides its tool.
+   * Federation follows the repo's advertise decision (`advertised()`): a repo
+   * that never invited graft gets neither the graft six nor the max_* two —
+   * same context-budget reasoning, just more tools. */
+  const federated = new KeptListing<Awaited<ReturnType<typeof availableFederatedTools>>[number]>(
+    () => availableFederatedTools(),
+    changed('notifications/tools/list_changed'),
+  );
+  if (!brainsOnly && (dirOverride !== undefined || hasGraftIndex(root) || !!mainWorktreeRoot(root))) void federated.refresh();
+
   const repoTools = () =>
     (brainsOnly ? [] : advertised(root, dirOverride)).map((t) => ({ name: inBrand(t.name), description: inBrand(t.description), inputSchema: t.inputSchema }));
+  /** Federated tools, gated on the same advertise decision as the graft tools. */
+  const federatedTools = (): Promise<Awaited<ReturnType<typeof availableFederatedTools>>> =>
+    brainsOnly || advertised(root, dirOverride).length === 0 ? Promise.resolve([]) : federated.get(deadline);
 
   const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
   rl.on('line', (line) => {
@@ -186,13 +202,23 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         if (isNotification) return;
         const local = repoTools();
         if (!paired) {
-          reply(id, { tools: local });
+          // [graft-Max] federated sibling tools ride along, but ONLY when the
+          // repo invited graft (advertised() non-empty) — same budget rule.
+          federatedTools().then(
+            (f) => reply(id, { tools: [...local, ...(f ?? [])] }),
+            () => reply(id, { tools: local }),
+          );
           return;
         }
         // Paired: the workspace's tools too, as it defines them. A repo tool's name wins a clash.
         const taken = new Set(local.map((t) => t.name));
-        tools.get(deadline).then((remote) =>
-          reply(id, { tools: [...local, ...remote.filter((t) => !taken.has(t.name))] }),
+        federatedTools().then(
+          (f) =>
+            tools.get(deadline).then((remote) => {
+              const fed = (f ?? []).filter((t) => !taken.has(t.name));
+              reply(id, { tools: [...local, ...fed, ...remote.filter((t) => !taken.has(t.name))] });
+            }),
+          () => tools.get(deadline).then((remote) => reply(id, { tools: [...local, ...remote.filter((t) => !taken.has(t.name))] })),
         );
         return;
       }
@@ -224,6 +250,15 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         }
         if (brainsOnly) {
           reply(id, { content: [{ type: 'text', text: `this server answers your Trail workspace's tools only; ${name} isn't one` }], isError: true });
+          return;
+        }
+        // [graft-Max] federated sibling tools (max_*) — proxied before the repo
+        // graph path. Never throws; every failure comes back as isError content.
+        if (FEDERATED_TOOL_NAMES.has(name.toLowerCase())) {
+          callFederatedTool(name, args, root).then(
+            (r) => reply(id, r ? { content: [{ type: 'text', text: r.text }], isError: r.isError } : { content: [{ type: 'text', text: `unknown tool: ${name}` }], isError: true }),
+            (err) => replyError(id, -32603, err instanceof Error ? err.message : String(err)),
+          );
           return;
         }
         // Async because a tool call may rebuild the graph first (see
