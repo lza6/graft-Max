@@ -174,6 +174,7 @@ const myselfId = (): string => myHost() + ':' + process.pid;
 const REMOTE_STALE_MS = 3 * 60_000;
 
 let lastTouch = 0;
+let registeredRoot: string | null = null;
 /** 工具调用时刷新本会话的 lastSeen（20s 节流，避免每次调用都写盘）。 */
 export function touchSession(): void {
   const now = Date.now();
@@ -183,7 +184,19 @@ export function touchSession(): void {
     const me = myHost();
     const rows = readSessions();
     const mine = rows.find((r) => (r.host ?? me) === me && r.pid === process.pid);
-    if (!mine) return;
+    if (!mine) {
+      // 行被别的 host 按 lastSeen 剪掉了（本进程空闲超过判活窗口）→ 重建，避免"复活不了"
+      if (!registeredRoot) return;
+      const fresh: SessionRow = {
+        pid: process.pid, host: me, cwd: registeredRoot.split(String.fromCharCode(92)).join('/'),
+        hostPid: process.ppid ?? null, hostCmd: shortHostCmd(),
+        user: process.env.USERNAME ?? process.env.USER ?? (() => { try { return userInfo().username || 'unknown'; } catch { return 'unknown'; } })(),
+        startedAt: new Date(now).toISOString(), endedAt: null, requests: 0,
+        lastSeen: new Date(now).toISOString(),
+      };
+      writeSessions([...rows, fresh]);
+      return;
+    }
     mine.lastSeen = new Date(now).toISOString();
     writeSessions(rows);
   } catch {/* best effort */}
@@ -222,6 +235,7 @@ function alive(pid: number): boolean {
 
 /** Register this server instance. Called once at boot. */
 export function registerSession(root: string, version: string): void {
+  registeredRoot = root;
   try {
     const me = myselfId();
     const rows = readSessions().filter((r) => `${r.host ?? me}` + ':' + r.pid !== me);
