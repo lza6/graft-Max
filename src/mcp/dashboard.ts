@@ -111,6 +111,7 @@ tr:last-child td{border-bottom:none}
   <div class="sp"></div>
   <button onclick="toggleTheme()" title="切换亮暗">🌓 主题</button>
   <button class="primary" onclick="poll(true)">刷新</button>
+  <button onclick="startTimer()" title="应用新的轮询间隔">应用间隔</button>
 </header>
 <div class="cards">
   <div class="card"><div class="k">活跃会话</div><div class="v" id="cSessions">–</div></div>
@@ -126,7 +127,8 @@ tr:last-child td{border-bottom:none}
 <script>
 let timer=null;
 function esc(s){return s.split('&').join('&amp;').split('<').join('&lt;')}
-function toggleTheme(){const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'}
+function toggleTheme(){const r=document.documentElement;const nv=r.dataset.theme==='dark'?'light':'dark';r.dataset.theme=nv;try{localStorage.setItem('gm-theme',nv)}catch(e){}}
+try{const saved=localStorage.getItem('gm-theme');if(saved)document.documentElement.dataset.theme=saved;}catch(e){}
 async function loadSessions(){
   try{const rows=await (await fetch('/sessions')).json();
   document.getElementById('cSessions').textContent=rows.length;
@@ -157,9 +159,15 @@ async function poll(force){
     if(atBottom)el.scrollTop=el.scrollHeight;
   }catch(e){}
   loadSessions();loadStats();
-  if(!timer){const ms=()=>parseInt(document.getElementById('ms').value)||2000;timer=setInterval(()=>poll(false),Math.max(500,ms()))}
+  if(!timer)startTimer();
+}
+function startTimer(){
+  if(timer)clearInterval(timer);
+  const ms=()=>{const v=parseInt(document.getElementById('ms').value);return isNaN(v)?2000:Math.max(500,v)};
+  timer=setInterval(()=>poll(false),ms());
 }
 poll(true);
+document.getElementById('ms').addEventListener('change', startTimer);
 </script></body></html>`;
 }
 
