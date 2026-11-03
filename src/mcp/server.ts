@@ -22,6 +22,20 @@ import { dlog, dlogBlock, clip, logPath, registerSession, endSession, bumpReques
 import { startDashboard } from './dashboard.js';
 // [graft-Max] 全局提示词注入（GRAFT_MAX_MCP=1 时生效，切回原版即摘除）
 import { upsertGlobalPrompt, removeGlobalPrompt, ensurePromptBlock } from '../hosts/max-prompt.js';
+// [graft-Max] ICM 时序记忆：工具调用史异步写入 icm（timeline），不阻塞响应
+import { spawn as icmSpawn } from 'node:child_process';
+
+/** 工具调用完成后异步记入 icm 时序（fire-and-forget；失败静默）。
+ * 内容精简：工具名 + 关键参数 + 耗时 + isError——够 icm recall 时定位上下文。 */
+function recordIcmTimeline(tool: string, args: Record<string, unknown>, ms: number, isError: boolean): void {
+  try {
+    if (process.env.GRAFT_MAX_ICM === '0') return; // 可关
+    const brief = JSON.stringify(args).slice(0, 200);
+    const content = `[${new Date().toISOString()}] ${tool} ${ms}ms isError=${isError} args=${brief}`;
+    const child = icmSpawn('icm.exe', ['remember', content], { windowsHide: true, stdio: 'ignore', shell: false });
+    child.on('error', () => {/* icm 不在 PATH 静默 */});
+  } catch {/* 永不阻塞 */}
+}
 
 /**
  * MCP tool name → the command enum the telemetry contract knows. A tool absent
@@ -283,6 +297,7 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
           callFederatedTool(name, args, root).then(
             (r) => {
               dlogBlock(`<-- 工具返回（联邦）  ${name}  ${Date.now() - t0}ms  isError=${r?.isError}`, r?.text ?? 'unknown tool');
+              recordIcmTimeline(name, args, Date.now() - t0, !!r?.isError);
               reply(id, r ? { content: [{ type: 'text', text: r.text }], isError: r.isError } : { content: [{ type: 'text', text: `unknown tool: ${name}` }], isError: true });
             },
             (err) => {
@@ -311,6 +326,7 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         callTool(root, name, args, dirOverride).then(
           (r) => {
             dlogBlock(`<-- tools/call (graft)  ${name}  ${Date.now() - graftCallT0}ms  isError=${r.isError}`, r.text);
+            recordIcmTimeline(name, args, Date.now() - graftCallT0, r.isError);
             // No `hit`: `isError` means the tool failed, which is not the same
             // question as "did the graph have an answer". Absent beats wrong.
             // hasOwn for the same reason as track()'s: a client is free to send
