@@ -15,7 +15,7 @@
  *     alive) are pruned on read, so crashed servers don't haunt the list.
  */
 import { appendFile, mkdir, rename, readFile, writeFile, stat, unlink } from 'node:fs/promises';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -160,15 +160,20 @@ export interface SessionRow {
 
 function readSessions(): SessionRow[] {
   try {
-    return JSON.parse(existsSync(SESSIONS_FILE) ? readFileSync(SESSIONS_FILE, 'utf8') : '[]');
+    const raw = existsSync(SESSIONS_FILE) ? readFileSync(SESSIONS_FILE, 'utf8') : '[]';
+    return JSON.parse(raw || '[]');
   } catch {
-    return [];
+    return []; // 坏文件：视为空，下一次写会原子重建
   }
 }
 
 function writeSessions(rows: SessionRow[]): void {
   try {
-    void writeFile(SESSIONS_FILE, JSON.stringify(rows, null, 1), 'utf8');
+    // [graft-Max] 同步原子写：多 server 并发 bump 时，async writeFile 交错会把
+    // 文件截成 0 字节（实测发生过）。writeFileSync + 同目录 tmp + rename 原子替换。
+    const tmp = SESSIONS_FILE + '.tmp';
+    writeFileSync(tmp, JSON.stringify(rows, null, 1), 'utf8');
+    renameSync(tmp, SESSIONS_FILE);
   } catch {
     /* best effort */
   }
