@@ -3,11 +3,11 @@
 所有重要改动记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循语义化：`0.28.0-max.N`（上游版本-max 补丁位）。
 
-## [0.28.0-max.7] — 2026-11
+## [0.28.0-max.8] — 2026-11
 
 ### 新增 · Docker 部署
 - **`Dockerfile.max`**：MCP stdio + 可选 Dashboard 镜像（与上游 GitHub App 的 `Dockerfile` 物理分离）
-  - 多阶段构建：build 阶段装 python3/make/g++ 编译 tree-sitter 语法，运行阶段只留 git/ca-certificates/curl
+  - 多阶段构建：build 阶段只需 node（原生语法包是 devDep，运行时走 WASM，无需编译器），运行阶段只留 git/ca-certificates/curl
   - 非 root 运行（`USER node`），仓库以 volume 挂到 `/workspace`，建图产物写回挂载目录
   - 联邦后端可选：`INSTALL_QMD=1`（默认）、`INSTALL_CCC`/`INSTALL_GITNEXUS` 按需；未装由 probe 门控自动隐藏
   - **国内网络默认可用**：apt → `mirrors.aliyun.com`、npm → `registry.npmmirror.com`（容器内实测直连可达），
@@ -25,6 +25,8 @@
   容器内用户名回退 `os.userInfo()`（原来显示 unknown）
 - README 增《Docker 部署》章节；docs-selfdev/项目约束.md 增 §7 Docker 约束
 
+
+## [0.28.0-max.7] — 2026-11
 
 ### 新增
 - **T2 进程内嵌 qmd**（`src/mcp/fed-qmd.ts`）：max_find_docs 直连 qmd SDK
