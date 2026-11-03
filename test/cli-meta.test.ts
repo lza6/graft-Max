@@ -37,7 +37,8 @@ test('formatVersionReport: offline / unreachable', () => {
 test('formatUpgradeReport: npx no-op suggests a permanent install', () => {
   const out = formatUpgradeReport({ ran: false, ok: true, oldVersion: '0.4.4' });
   assert.match(out, /npx/);
-  assert.match(out, /npm install -g @nanonets\/graft/);
+  // [graft-Max] PKG_NAME comes from package.json (`graft-max`), not the upstream name.
+  assert.match(out, /npm install -g graft-max/);
 });
 
 test('formatUpgradeReport: successful upgrade shows old -> new', () => {
@@ -168,5 +169,5 @@ test('formatUpgradeReport: a recognised failure shows the plain fix, not npm\'s 
 
 test('formatUpgradeReport: an unrecognised failure keeps npm\'s own error above the failed line', () => {
   const out = formatUpgradeReport({ ran: true, ok: false, oldVersion: '0.4.4', npmError: 'npm error code E404\n' });
-  assert.equal(out, 'npm error code E404\n✗ npm install -g @nanonets/graft@latest failed');
+  assert.equal(out, 'npm error code E404\n✗ npm install -g graft-max@latest failed');
 });

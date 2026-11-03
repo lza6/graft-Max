@@ -26,6 +26,16 @@ process.env.DO_NOT_TRACK = '1';
 process.env[BRAND_ENV] = 'trail';
 process.env.TRAIL_TEST_SERVER = 'http://trail.test';
 process.env.TRAIL_NO_FETCH = '1';
+// [graft-Max T8 fix] shipCheck persists its seen-set under TRAIL_HOME/sessions/
+// keyed by session_id — without a sandboxed TRAIL_HOME the first run on a machine
+// writes the marks into the REAL ~/.trail and every later run reads them back as
+// "already seen", failing the once-per-set assertions. Sandbox the home (and
+// scrub any marks earlier runs leaked) so this file is idempotent.
+import { mkdtempSync as t6mkdtemp, rmSync as t6rm } from 'node:fs';
+import { tmpdir as t6tmp } from 'node:os';
+const t6home = join(t6mkdtemp(join(t6tmp(), 'ship-checks-home-')), '.trail');
+mkdirSync(t6home, { recursive: true });
+process.env.TRAIL_HOME = t6home;
 
 let n = 0;
 const uid = () => `u${++n}`;
@@ -82,7 +92,7 @@ test("in a hook, with no TRAIL_INVOKED_AS, a repo wired for trail still gets the
   mkdirSync(join(wired, '.trail'), { recursive: true });
   writeFileSync(join(wired, '.trail', 'hook.cjs'), '');
   const input = { session_id: 'wired-1', tool_name: 'Bash', tool_input: { command: 'git commit -m x' } };
-  const found = shipCheck(input, wired, 'git commit -m x', () => [conflict], {});
+  const found = shipCheck(input, wired, 'git commit -m x', () => [conflict]);
   assert.ok(found && 'warn' in found, 'the check ran with no brand in the environment');
   const plain = tmpRepo('ship-graft');
   assert.equal(shipCheck({ ...input, session_id: 'wired-2' }, plain, 'git commit -m x', () => [conflict], {}), null);

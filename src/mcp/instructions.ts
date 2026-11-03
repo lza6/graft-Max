@@ -54,7 +54,7 @@ export function mcpInstructions(): string {
     '- max_trace_calls — 调用链/爆炸半径，重命名前必跑。',
     '- max_file_api — 一个文件的全部 API（~200 token）。',
     '- max_repo_map — 陌生仓库导航。',
-    '- max_find_docs / max_trace_arch — 文档检索 / 架构依赖链（联邦工具）。',
+    '- max_find_docs / max_trace_arch / max_search_semantic — 文档检索 / 架构依赖链 / 语义代码搜索（联邦工具，按仓库安装情况出现）。',
     '',
     '结果已反映未提交编辑——每次查询前图谱自动刷新。',
   ].join('\n');

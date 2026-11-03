@@ -16,7 +16,7 @@ import { WorkspaceConnector, type RemotePrompt, type RemoteTool } from './connec
 import { teamLine, teamWorkspace } from '../cloud/team-file.js';
 import { KeptListing, within } from './kept-listing.js';
 // [graft-Max] sibling-tool federation: qmd/gitnexus proxied through this server.
-import { availableFederatedTools, callFederatedTool, FEDERATED_TOOL_NAMES } from './federation.js';
+import { availableFederatedTools, callFederatedTool, FEDERATED_TOOL_NAMES, shutdownFederatedSessions } from './federation.js';
 // [graft-Max] developer log (GRAFT_MAX_LOG=1 or a path; default ~/.graft-max/mcp.log)
 import { dlog, dlogBlock, clip, logPath, registerSession, endSession, bumpRequests } from './devlog.js';
 import { startDashboard } from './dashboard.js';
@@ -145,7 +145,7 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
   } else {
     if (removeGlobalPrompt()) dlog('全局提示词已摘除（GRAFT_MAX_MCP 未启用）');
   }
-  startDashboard();
+  startDashboard(undefined, root);
   for (const line of upkeep) console.error(line);
   // Same deal for the telemetry queue: flushed from a detached child at boot, so
   // a Cursor user who never touches the CLI still gets their events out.
@@ -178,7 +178,7 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
    * that never invited graft gets neither the graft six nor the max_* two —
    * same context-budget reasoning, just more tools. */
   const federated = new KeptListing<Awaited<ReturnType<typeof availableFederatedTools>>[number]>(
-    () => availableFederatedTools(),
+    () => availableFederatedTools(root),
     changed('notifications/tools/list_changed'),
   );
   if (!brainsOnly && (dirOverride !== undefined || hasGraftIndex(root) || !!mainWorktreeRoot(root))) void federated.refresh();
@@ -348,8 +348,13 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         if (!isNotification) replyError(id, -32601, `method not found: ${method}`);
     }
   });
-  process.stdin.on('end', () => {
+  process.stdin.on('end', async () => {
     dlog(`=== graft-Max MCP server exit === pid=${process.pid}`);
+    // [graft-Max T2/T3] tear down federated children (gitnexus session,
+    // embedded qmd store) with the same lifecycle as the server itself.
+    // Await before exit: qmd's sqlite close must land (R1, review max.7) or
+    // the WAL/SHM files are left dirty.
+    try { await shutdownFederatedSessions(); } catch {/* exit must proceed */}
     endSession();
     process.exit(0);
   });
@@ -366,8 +371,12 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
   const leash = setInterval(() => {
     if (Date.now() - lastStdin > 10 * 60_000) {
       dlog(`=== graft-Max MCP server exit (stdin leash: silent 10min) === pid=${process.pid}`);
-      endSession();
-      process.exit(0);
+      // Await the teardown (qmd sqlite close), same as the stdin-end path.
+      void (async () => {
+        try { await shutdownFederatedSessions(); } catch {/* exit must proceed */}
+        endSession();
+        process.exit(0);
+      })();
     }
   }, 60_000);
   leash.unref();

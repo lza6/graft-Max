@@ -15,9 +15,10 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile, stat, open } from 'node:fs/promises';
-import { dlog, logPath, liveSessions, SESSIONS_FILE, type SessionRow } from './devlog.js';
-import { existsSync, readFileSync } from 'node:fs';
+import { dlog, logPath, liveSessions, SESSIONS_FILE, GRAFT_MAX_HOME, type SessionRow } from './devlog.js';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 
 const DEFAULT_PORT = 24688;
 
@@ -54,9 +55,96 @@ async function tailLines(n: number): Promise<string[]> {
   }
 }
 
+/** [graft-Max T9] per-tool call counts + timing, parsed from the last chunk of
+ * the log. Log lines look like `<-- 工具返回…  <name>  123ms  isError=true`
+ * (server.ts dlogBlock). Powers the dashboard's 耗时趋势 card — visual proof of
+ * the T2/T3 fast-path wins. Reads at most the last ~256KB, so cost is flat. */
+async function toolStats(): Promise<Record<string, { calls: number; avgMs: number; errors: number }>> {
+  const lines = await tailLines(800);
+  const per = new Map<string, { calls: number; totalMs: number; errors: number }>();
+  for (const line of lines) {
+    const m = /<--\s+(?:工具返回|tools\/call).*?\s(\S+)\s+(\d+)ms\s+isError=(true|false)/.exec(line);
+    if (!m) continue;
+    // normalize across spellings (max_/graft_/trail_/legacy aliases) so one
+    // tool's calls aggregate on one row
+    const name = m[1].replace(/^(max_|graft_|trail_)/, '').replace(/^ask$/, 'find_code');
+    const e = per.get(name) ?? { calls: 0, totalMs: 0, errors: 0 };
+    e.calls++;
+    e.totalMs += Number(m[2]);
+    if (m[3] === 'true') e.errors++;
+    per.set(name, e);
+  }
+  const out: Record<string, { calls: number; avgMs: number; errors: number }> = {};
+  for (const [name, e] of per) out[name] = { calls: e.calls, avgMs: Math.round(e.totalMs / e.calls), errors: e.errors };
+  return out;
+}
+
 function json(res: ServerResponse, code: number, body: unknown): void {
   res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(body));
+}
+
+/** [graft-Max T9.2] Storage view: every artifact this tool writes, with its
+ * absolute path and on-disk size (directories measured with one recursive
+ * walk, depth-capped). Feeds the 存储/产物 card so "where is my data and how
+ * big is it" is answerable from the panel without opening a terminal. */
+interface StorageEntry { label: string; path: string; bytes: number; kind: 'file' | 'dir' }
+
+function dirSize(dir: string, depth = 0): number {
+  let total = 0;
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  for (const e of entries) {
+    const p = join(dir, e.name);
+    try {
+      if (e.isDirectory()) {
+        // depth cap: graph dirs are shallow; anything deeper is not ours
+        if (depth < 6) total += dirSize(p, depth + 1);
+      } else if (e.isFile()) {
+        total += statSync(p).size;
+      }
+    } catch {/* raced delete / permission — skip the entry */}
+  }
+  return total;
+}
+
+async function storageEntries(root: string): Promise<StorageEntry[]> {
+  const trailHome = process.env.TRAIL_HOME ?? join(homedir(), '.trail');
+  const candidate: Array<[label: string, path: string, kind: StorageEntry['kind']]> = [
+    ['开发者日志（滚动 5MB）', logPath(), 'file'],
+    ['会话注册表', SESSIONS_FILE, 'file'],
+    [' Trail 全局状态（learnings/sessions）', trailHome, 'dir'],
+    ['graft-Max 主目录', GRAFT_MAX_HOME, 'dir'],
+  ];
+  // per-repo artifacts for the repo this server serves
+  const repo: Array<[label: string, path: string, kind: StorageEntry['kind']]> = [
+    ['本仓库图谱 graft/（节点+缓存）', join(root, 'graft'), 'dir'],
+    ['本仓库 Trail 状态 .trail/', join(root, '.trail'), 'dir'],
+    ['本仓库语义索引 .cocoindex_code/', join(root, '.cocoindex_code'), 'dir'],
+  ];
+  const out: StorageEntry[] = [];
+  for (const [label, p, kind] of [...candidate, ...repo]) {
+    let bytes = 0;
+    let ok = false;
+    try {
+      bytes = kind === 'dir' ? dirSize(p) : statSync(p).size;
+      ok = true;
+    } catch {/* absent — still listed with 0 */}
+    out.push({ label: label.trim(), path: p, bytes, kind });
+    void ok;
+  }
+  return out;
+}
+
+function human(bytes: number): string {
+  if (bytes >= 1024 ** 3) return (bytes / 1024 ** 3).toFixed(2) + ' GB';
+  if (bytes >= 1024 ** 2) return (bytes / 1024 ** 2).toFixed(1) + ' MB';
+  if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return bytes + ' B';
 }
 
 function page(): string {
@@ -120,16 +208,19 @@ tr:last-child td{border-bottom:none}
   <div class="card"><div class="k">累计工具调用</div><div class="v" id="cRequests">–</div></div>
   <div class="card"><div class="k">日志大小</div><div class="v" id="cLog">–</div></div>
   <div class="card"><div class="k">建图状态</div><div class="v" id="cBuilding" style="font-size:15px">–</div></div>
+  <div class="card"><div class="k">工具耗时 <small>（近 800 行日志）</small></div><div class="v" id="cTools" style="font-size:13px">–</div></div>
   <div class="card"><div class="k">面板地址</div><div class="v" style="font-size:13px">127.0.0.1:24688<br><small>实时日志 / 会话 / 统计</small></div></div>
 </div>
 <h2><span class="dot"></span>活跃会话 · 谁正在使用</h2>
 <table id="sess"><thead><tr><th>状态</th><th>pid</th><th>用户</th><th>仓库</th><th>宿主进程</th><th>请求数</th><th>启动时间</th></tr></thead><tbody></tbody></table>
 <h2>实时日志 <span class="badge">自动刷新 <input id="ms" value="2000"> ms</span></h2>
 <div id="log"></div>
+<h2>存储 / 产物 <span class="badge">本工具落盘的全部路径与占用</span></h2>
+<table id="store"><thead><tr><th>产物</th><th>类型</th><th>大小</th><th>路径</th><th></th></tr></thead><tbody></tbody></table>
 </div>
 <script>
 let timer=null;
-function esc(s){return s.split('&').join('&amp;').split('<').join('&lt;')}
+function esc(s){return s.split('&').join('&amp;').split('<').join('&lt;').split('"').join('&quot;').split("'").join('&#39;')}
 function toggleTheme(){const r=document.documentElement;const nv=r.dataset.theme==='dark'?'light':'dark';r.dataset.theme=nv;try{localStorage.setItem('gm-theme',nv)}catch(e){}}
 try{const saved=localStorage.getItem('gm-theme');if(saved)document.documentElement.dataset.theme=saved;}catch(e){}
 async function loadSessions(){
@@ -147,8 +238,20 @@ async function loadStats(){
   const bEl=document.getElementById('cBuilding');
   if(bEl){bEl.textContent=(s.building&&s.building.length)?('建图中('+s.building.length+')'):'空闲';}
   document.getElementById('cLog').innerHTML=(s.logBytes/1024).toFixed(1)+' <small>KB（5MB 自动滚动）</small>';
+  const tEl=document.getElementById('cTools');
+  if(tEl){const ts=s.toolStats||{};const rows=Object.entries(ts).sort((a,b)=>b[1].calls-a[1].calls).slice(0,6);
+    tEl.innerHTML=rows.length?rows.map(([n,v])=>esc(n)+' · '+v.calls+'次 · 均'+v.avgMs+'ms'+(v.errors?' <span style=\\'color:var(--err,#e5484d)\\'>'+v.errors+'错</span>':'')).join('<br>'):'<small>暂无调用</small>';}
   }catch(e){}
 }
+function fmtBytes(b){if(b>=1073741824)return (b/1073741824).toFixed(2)+' GB';if(b>=1048576)return (b/1048576).toFixed(1)+' MB';if(b>=1024)return (b/1024).toFixed(1)+' KB';return b+' B'}
+async function loadStorage(){
+  try{const s=await (await fetch('/storage')).json();
+  const tb=document.querySelector('#store tbody');tb.innerHTML='';
+  for(const e of s.entries){tb.insertAdjacentHTML('beforeend',
+    '<tr><td>'+esc(e.label)+'</td><td class=muted>'+(e.kind==='dir'?'目录':'文件')+'</td><td class=mono>'+fmtBytes(e.bytes)+'</td><td class=mono style=max-width:420px;word-break:break-all>'+esc(e.path)+'</td><td><button style="padding:2px 8px;font-size:11px" onclick="copyPath(this)" data-p="'+esc(e.path)+'">复制</button></td></tr>')}
+  }catch(e){}
+}
+function copyPath(btn){try{navigator.clipboard.writeText(btn.dataset.p);btn.textContent='已复制';setTimeout(()=>{btn.textContent='复制'},1200)}catch(e){}}
 async function poll(force){
   const el=document.getElementById('log');
   try{
@@ -164,6 +267,8 @@ async function poll(force){
     if(atBottom)el.scrollTop=el.scrollHeight;
   }catch(e){}
   loadSessions();loadStats();
+  // [R2 review] dirSize 是同步递归走盘，不跟 2s poll：首轮一次 + 30s 慢轮询
+  if(!globalThis._stTimer){loadStorage();globalThis._stTimer=setInterval(loadStorage,30000);}
   if(!timer)startTimer();
 }
 function startTimer(){
@@ -176,7 +281,7 @@ document.getElementById('ms').addEventListener('change', startTimer);
 </script></body></html>`;
 }
 
-export function startDashboard(explicitPort?: number): void {
+export function startDashboard(explicitPort?: number, root = process.cwd()): void {
   const want = process.env.GRAFT_MAX_UI;
   if (!want || want === '0') return; // opt-in only
   const port = explicitPort ?? ((want && want !== '1' ? parseInt(want) : DEFAULT_PORT) || DEFAULT_PORT);
@@ -214,7 +319,12 @@ export function startDashboard(explicitPort?: number): void {
           sessionsFile: SESSIONS_FILE,
           requests: sessions.reduce((a, s2) => a + s2.requests, 0),
           building,
+          // [graft-Max T9] per-tool stats for the 耗时趋势 card
+          toolStats: await toolStats(),
         });
+      } else if (url.pathname === '/storage') {
+        // [graft-Max T9.2] 本工具全部落盘产物的路径+大小
+        json(res, 200, { root, entries: await storageEntries(root) });
       } else {
         json(res, 404, { error: 'not found' });
       }

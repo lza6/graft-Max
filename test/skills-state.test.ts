@@ -148,7 +148,10 @@ test("recordUse: two uses in a row failing at the same step mark it needs-fix, w
   assert.equal(s.status, "needs-fix");
   assert.equal(s.prevStatus, "active");
   assert.deepEqual(s.lastFails, [{ step: 4, at: "2026-11-02T10:00:00.000Z" }, { step: 4, at: "2026-11-04T16:02:11.000Z" }]);
-  assert.equal(s.statusWhy, "step 4 failed on Nov 2 and Nov 4");
+  // monthDay renders in LOCAL time; 16:02Z is already the next day east of
+  // UTC, so the expected day comes from the same Date the code reads.
+  const localDay = (iso: string) => ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][new Date(iso).getMonth()] + ' ' + new Date(iso).getDate();
+  assert.equal(s.statusWhy, `step 4 failed on ${localDay('2026-11-02T10:00:00.000Z')} and ${localDay('2026-11-04T16:02:11.000Z')}`);
   assert.deepEqual(statusLines(env), [{ at: "2026-11-04T16:02:11.000Z", event: "status", skill: ID, from: "active", to: "needs-fix", reason: "failed-twice" }]);
   // Already needs-fix: a third failure changes nothing more.
   recordUse(ID, use({ at: "2026-11-05T10:00:00.000Z", failedStep: 4, check: "none" }), env);

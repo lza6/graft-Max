@@ -148,7 +148,8 @@ test('initialize carries instructions — the layer that survives tool deferral'
     assert.ok(instructions.includes(t), `names ${t}`);
   }
   assert.ok(instructions.length < 1000, `instructions must stay under 1000 chars, got ${instructions.length}`);
-  assert.match(serverInfo.version, /^\d+\.\d+\.\d+$/, 'real version, not the old hardcoded 0');
+  // [graft-Max] semver with our -max.N suffix on top of the upstream triple.
+  assert.match(serverInfo.version, /^\d+\.\d+\.\d+(-max\.\d+)?$/, 'real version, not the old hardcoded 0');
 });
 
 test('unknown method returns -32601', async () => {

@@ -34,7 +34,10 @@ export function runSync(dir: string, build: (d: string) => void = realBuild): vo
       ...computeStats(w),
     });
   } catch {
-    patchStats(dir, { syncing: false }); // leave dirty=true; retry next turn
+    // [S1 review max.7] record the failed attempt so autoIndexAfterEdit's
+    // throttle can back off — otherwise a broken-index repo pays a spawn +
+    // immediate failure on EVERY post-edit.
+    patchStats(dir, { syncing: false, syncedAt: new Date().toISOString() }); // leave dirty=true; retry next turn
   } finally {
     releaseLock(dir);
   }

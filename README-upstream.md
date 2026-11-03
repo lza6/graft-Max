@@ -1,3 +1,5 @@
+> [graft-Max] 本文件是上游 nanonets/graft 的原版 README，仅作上游同步参考；本项目文档见 README.md。
+
 <div align="center">
 
 <picture>

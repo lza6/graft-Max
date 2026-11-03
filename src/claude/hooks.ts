@@ -17,7 +17,7 @@ import { runningVersion, wiredHostIds } from '../upkeep.js';
 import { hostsWiredForTrail } from '../hosts/registry.js';
 import { flushClosedSessions, summarizeSession } from '../telemetry/sessions.js';
 import { maybeFlushInBackground } from '../telemetry/flush.js';
-import { handleStopEvent } from './stop.js';
+import { handleStopEvent, autoIndexAfterEdit } from './stop.js';
 import { main as preBashMain } from './pre-bash.js';
 import { classifyToolUse, commandInvokesGraft, isMcpToolName, isGraftMcpTool, parseSavings, recordToolUse, type ToolKind } from './session-metrics.js';
 import { adoptRepoBrand, brand, commandOnPath, repoWiredForTrail, tag, trailHandoverLine, trailOnPath } from '../brand.js';
@@ -549,7 +549,7 @@ export async function main(event: string): Promise<void> {
 
   if (event === 'pre-edit') { handlePreEdit(input, dir); return; }
 
-  if (event === 'post-edit') { await handlePostEdit(input, dir); return; }
+  if (event === 'post-edit') { await handlePostEdit(input, dir); autoIndexAfterEdit(dir); return; }
 
   if (event === 'tool-savings') {
     handleToolUse(input, dir);

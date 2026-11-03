@@ -16,13 +16,20 @@ import {
   builtRepo, byId, cloudFor, CLOUD_CALL, CLOUD_TOOLS, envWith, INIT, INITIALIZED, LIST, PROMPTS, REPO_CALL, rpc, SESSION, workspace,
 } from "./mcp-connector-helpers.js";
 
+
+// [graft-Max] The Max build's MCP server boots as the Max identity and lists
+// max_* names (server.ts: "Max 二进制默认即 Max 身份"). The upstream contract
+// these tests guard — the repo's six tools advertised, workspace tools beside
+// them — holds under either spelling, so repo-tool asserts use this.
+const repoToolListed = (names: string[]) => names.includes("trail_find_code") || names.includes("max_find_code");
+
 test("lists the workspace's tools beside the repo tools, and passes calls through", async () => {
   const ws = await workspace();
   const dir = await builtRepo();
   const { rs } = await rpc(SESSION, dir, envWith(cloudFor(ws.url)), 6);
   const tools = byId(rs, 2).result.tools;
   const names = tools.map((t: any) => t.name);
-  assert.ok(names.includes("trail_find_code"), names.join(","));
+  assert.ok(repoToolListed(names), names.join(","));
   for (const n of CLOUD_TOOLS) assert.ok(names.includes(n), `${n} in ${names.join(",")}`);
   // The workspace's own definitions, whole: schema (always_follow) and annotations too.
   const save = tools.find((t: any) => t.name === "save_learning");
@@ -65,9 +72,10 @@ test("passes the workspace's instructions on, after the repo's own", async () =>
   const dir = await builtRepo();
   const { rs } = await rpc([INIT, INITIALIZED, LIST], dir, envWith(cloudFor(ws.url)), 2);
   const text: string = byId(rs, 1).result.instructions;
-  assert.match(text, /indexed by trail/);
+  assert.match(text, /indexed by trail|已被 graft-Max 索引/);
   assert.ok(text.includes(WORKSPACE_INSTRUCTIONS), text);
-  assert.ok(text.indexOf("indexed by trail") < text.indexOf(WORKSPACE_INSTRUCTIONS), "local first, the workspace's appended");
+  const localHead = Math.min(...["indexed by trail", "已被 graft-Max 索引"].map((m) => { const i = text.indexOf(m); return i === -1 ? Infinity : i; }));
+  assert.ok(localHead < text.indexOf(WORKSPACE_INSTRUCTIONS), "local first, the workspace's appended");
   assert.equal(ws.log.filter((l) => l.body?.method === "initialize").length, 1, "initialized once");
 });
 
@@ -93,9 +101,9 @@ test("sends the CLI token as a bearer, to <trail>/mcp, or to TRAIL_MCP_URL when 
 test("trail tools fail soft when the workspace is unreachable: the repo tools list and answer", async () => {
   const dir = await builtRepo();
   const { rs } = await rpc(SESSION, dir, envWith(cloudFor("http://127.0.0.1:9")), 6);
-  assert.ok(byId(rs, 1).result.instructions.includes("indexed by trail"));
+  assert.ok(/indexed by trail|已被 graft-Max 索引/.test(byId(rs, 1).result.instructions));
   const names = byId(rs, 2).result.tools.map((t: any) => t.name);
-  assert.ok(names.includes("trail_find_code"));
+  assert.ok(repoToolListed(names));
   for (const n of CLOUD_TOOLS) assert.ok(!names.includes(n), `${n} isn't listed when the workspace can't say it has it`);
   const call = byId(rs, 3).result;
   assert.equal(call.isError, true);
@@ -110,7 +118,7 @@ test("a slow workspace holds the tool list up for 4 s at most", async () => {
   const dir = await builtRepo();
   const { rs, at, sentAt } = await rpc([INIT, INITIALIZED, LIST, REPO_CALL], dir, envWith(cloudFor(ws.url)), 3);
   const names = byId(rs, 2).result.tools.map((t: any) => t.name);
-  assert.ok(names.includes("trail_find_code"));
+  assert.ok(repoToolListed(names));
   // initialize and tools/list each wait 4 s at most; tsx start-up is on top.
   assert.ok(at.get(2)! - sentAt < 11000, `tools/list took ${at.get(2)! - sentAt} ms`);
   assert.equal(byId(rs, 4).result.isError, false);
@@ -121,7 +129,7 @@ test("a workspace that answers after the 4 s wait gets its tools listed then: tr
   const ws = await workspace({ delayMs: 2500 });
   const dir = await builtRepo();
   const { rs } = await rpc([INIT, INITIALIZED, LIST], dir, envWith(cloudFor(ws.url)), 2, [], (r) => r.some((m) => m.method === "notifications/tools/list_changed"));
-  assert.ok(byId(rs, 2).result.tools.some((t: any) => t.name === "trail_find_code"));
+  assert.ok(byId(rs, 2).result.tools.some((t: any) => repoToolListed([t.name])));
   assert.ok(rs.some((m) => m.method === "notifications/tools/list_changed"), JSON.stringify(rs.map((m) => m.method ?? m.id)));
 });
 
@@ -141,7 +149,7 @@ test("not paired: the repo tools as before, nothing of the workspace's", async (
   assert.deepEqual(init.capabilities, { tools: {} });
   assert.doesNotMatch(init.instructions, /Trail workspace|memory/);
   const names = byId(rs, 2).result.tools.map((t: any) => t.name);
-  assert.ok(names.includes("trail_find_code"));
+  assert.ok(repoToolListed(names));
   for (const n of [...CLOUD_TOOLS, "list_brains", "search_rules", "get_rules"]) assert.ok(!names.includes(n));
   assert.equal(byId(rs, 3).result.isError, true);
 });

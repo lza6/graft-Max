@@ -44,3 +44,25 @@ cd D:\自研工具\graft-Max
 node e2e/e2e-federation.mjs        # 默认根=graft-Max 自身
 $env:E2E_ROOT="C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code"; node e2e/e2e-federation.mjs
 ```
+
+## max.7 联邦性能与第 9 工具（2026-11，e2e-fed-perf.mjs 8/8）
+
+真实 stdio JSON-RPC，根目录 = duck2api-hub（授权实验仓库）。真实后端调用，无 mock。
+
+| 用例 | 结果 | 耗时 | 说明 |
+|------|------|------|------|
+| tools/list 含联邦工具组 | ✅ | 695ms | 9 个 max_*（含 max_search_semantic） |
+| T2 qmd 内嵌搜索 | ✅ | ~2-5ms 进程内 | createRequire → 动态 import 修复（top-level-await ESM） |
+| T4 缓存命中 | ✅ | 10-15ms | `[cached, 60s TTL]` 标注 |
+| T3 gitnexus 首调（含握手） | ✅ | 1047-1939ms | — |
+| T3 gitnexus 二调（会话复用） | ✅ | **128-200ms** | 原 1244ms |
+| T5 语义搜索 | ✅ | ~380ms | ccc 本地嵌入，file:line + score |
+
+复跑：`node e2e/e2e-fed-perf.mjs`（E2E_ROOT 可覆盖，默认 duck2api-hub）
+
+## 存储/产物视图验收（max.7 追加）
+
+- /storage 端点：7 条产物（日志 520KB、sessions.json、~/.trail 30.7KB、.graft-max 523KB、
+  仓库 graft/ 12.6MB、.trail/ 0B、.cocoindex_code/ 60MB）路径+大小全部正确
+- Playwright：表 7 行渲染、复制按钮反馈"已复制"、轮询解耦实证（7s: /stats×4, /storage×1）
+- 截图：dashboard-storage.png（暗色主题存储表）、dashboard-full.png（全页）

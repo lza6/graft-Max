@@ -15,6 +15,13 @@ import { readCloud } from "../src/cloud/workspace.js";
 import { WORKSPACE_TOKEN } from "./fake-workspace-mcp.js";
 import { builtRepo, byId, cloudFor, CLOUD_TOOLS, envWith, INIT, INITIALIZED, LIST, live, rpc, workspace } from "./mcp-connector-helpers.js";
 
+
+// [graft-Max] The Max build's MCP server boots as the Max identity and lists
+// max_* names (server.ts: "Max 二进制默认即 Max 身份"). The upstream contract
+// these tests guard — the repo's six tools advertised, workspace tools beside
+// them — holds under either spelling, so repo-tool asserts use this.
+const repoToolListed = (names: string[]) => names.includes("trail_find_code") || names.includes("max_find_code");
+
 test("a cloud.json with no url: not paired, and trail mcp (repo or --brains) starts and answers", async () => {
   const broken = { token: "trl_x", workspace: { slug: "w" } };
   const env = envWith(broken);
@@ -25,7 +32,7 @@ test("a cloud.json with no url: not paired, and trail mcp (repo or --brains) sta
 
   const dir = await builtRepo();
   const repo = await rpc([INIT, INITIALIZED, LIST], dir, envWith(broken), 2);
-  assert.ok(byId(repo.rs, 2).result.tools.some((t: any) => t.name === "trail_find_code"), JSON.stringify(repo.rs));
+  assert.ok(byId(repo.rs, 2).result.tools.some((t: any) => repoToolListed([t.name])), JSON.stringify(repo.rs));
   const brains = await rpc([INIT, INITIALIZED, LIST], dir, envWith(broken), 2, ["--brains"]);
   assert.deepEqual(byId(brains.rs, 2).result.tools, []);
 
@@ -34,7 +41,7 @@ test("a cloud.json with no url: not paired, and trail mcp (repo or --brains) sta
     const e = envWith({ ...cloudFor("http://127.0.0.1:9"), url });
     assert.doesNotThrow(() => new WorkspaceConnector({ env: e }).warm());
     const r = await rpc([INIT, INITIALIZED, LIST], dir, e, 2);
-    assert.ok(byId(r.rs, 2).result.tools.some((t: any) => t.name === "trail_find_code"), String(url));
+    assert.ok(byId(r.rs, 2).result.tools.some((t: any) => repoToolListed([t.name])), String(url));
   }
 });
 
@@ -91,7 +98,7 @@ test("one wait from boot: with a workspace that never answers, initialize and to
     const init = await s.wait((m) => m.id === 1);
     s.send(LIST);
     const list = await s.wait((m) => m.id === 2);
-    assert.ok(list.msg.result.tools.some((t: any) => t.name === "trail_find_code"));
+    assert.ok(list.msg.result.tools.some((t: any) => repoToolListed([t.name])));
     assert.ok(list.at - init.at < 1000, `tools/list waited ${list.at - init.at} ms after initialize`);
     // From start includes booting node with tsx, which Windows CI takes 7 to 9 s over on its own.
     assert.ok(list.at - s.started < (process.platform === "win32" ? 15000 : 7000), `${list.at - s.started} ms from start`);

@@ -67,16 +67,21 @@ test('trail spelling: renamed commands, the name in prose, the code map folder m
 });
 
 test('the instruction text under trail names trail commands only; under graft it is what it was', () => {
+  // [graft-Max] the canonical body is the Chinese Max block; under trail it is
+  // spelled trail (graft→trail, graft/→.trail/cache/) — same transformation
+  // contract the upstream English text had.
+  // graft-Max (hyphenated brand) survives the spelling pass by design; the
+  // bare `graft` command spellings convert to trail.
   const trail = instructionBody('trail');
-  assert.match(trail, /^## Trail — repo context graph/);
-  assert.match(trail, /`trail ask "<your question>" --source`/);
-  assert.match(trail, /`trail grep "<literal>"`/);
-  assert.match(trail, /`trail callers <symbol>`/);
-  assert.match(trail, /`\.trail\/cache\/INDEX\.md`/, 'under trail the code map is in .trail/cache/');
+  assert.match(trail, /^## graft-Max — 仓库上下文图谱/);
+  assert.match(trail, /`trail ask "你的问题" --source`/);
+  assert.match(trail, /`trail grep "<字面量>"`/);
+  assert.match(trail, /`trail callers <符号>`/);
+  assert.match(trail, /`\.trail\/cache\/`/, 'under trail the code map is in .trail/cache/');
   assert.doesNotMatch(trail, GRAFT_COMMAND);
-  assert.match(cursorRule('trail'), /^---\ndescription: Use the Trail context graph in \.trail\/cache\/ before exploring source\nalwaysApply: true\n---\n## Trail/);
+  assert.match(cursorRule('trail'), /^---\ndescription: Use the Trail context graph in \.trail\/cache\/ before exploring source\nalwaysApply: true\n---\n## graft-Max/);
   assert.equal(instructionBody('graft'), instructionBody());
-  assert.match(instructionBody(), /^## Graft — repo context graph/);
+  assert.match(instructionBody(), /^## graft-Max — 仓库上下文图谱/);
 });
 
 test('trail init for every agent: trail-named files, trail commands, a trail server', () => {

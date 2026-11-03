@@ -270,9 +270,9 @@ cd D:\自研工具\vendors\<name> && git pull
 
 - [x] v0.28.0-max.1 品牌化基座 + MCP 联邦层 + Dashboard + 自动建图 + 全局提示词
 - [x] 一键切换（max/orig）+ 幂等保障 + 日志防膨胀
-- [ ] **进程内嵌 qmd**：把 BM25 索引直接嵌进 graft-Max（省一次 spawn，预计 293ms → <50ms）
-- [ ] **gitnexus 常驻**：架构图查询复用连接（1244ms → ~300ms）
-- [ ] **cocoindex-code 集成**：语义代码搜索作为第 9 个工具（Δ-only 增量已验证 0.5s）
+- [x] **进程内嵌 qmd**（max.7）：进程内 searchLex 2-5ms，spawn 仅作兜底
+- [x] **gitnexus 常驻**（max.7）：会话复用，二次查询 128-200ms
+- [x] **cocoindex-code 集成**（max.7）：max_search_semantic 上线（本地嵌入 $0，probe 门控）
 - [ ] **编辑后自动增量索引 hooks**（项目多了再开，当前手动 ccc index）
 - [ ] **上游发版跟踪**：graft 0.29+ 的 viewer 改进择机合并
 - [ ] ** 发布 graft-max 到 npm**（私有 scope），脱离本机路径依赖

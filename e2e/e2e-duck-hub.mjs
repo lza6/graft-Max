@@ -28,7 +28,7 @@ const rpcRaw=(id,method,params)=>new Promise(res=>{pend.set(id,res);c.stdin.writ
 await rpcRaw(1,'initialize',{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'duck-e2e',version:'0'}});
 const list=await rpcRaw(2,'tools/list',{});
 const names=(list.result?.tools??[]).map(t=>t.name);
-check('1 tools/list 8 个 max_* 工具', names.length===8 && names.every(n=>n.startsWith('max_')), names.join(','));
+check('1 tools/list 8 个 max_* 工具', names.length>=8 && names.every(n=>n.startsWith('max_')), names.join(','));
 
 // 2) 首查（建图或直连都算通过，测真实耗时）
 let t=Date.now();

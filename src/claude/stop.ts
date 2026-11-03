@@ -169,10 +169,53 @@ function startSync(dir: string): void {
     if (stats?.dirty && acquireLock(dir)) {
       patchStats(dir, { syncing: true });
       const child = spawn(process.execPath, [syncRun, dir], { detached: true, stdio: 'ignore', windowsHide: true });
+      child.on('error', () => { /* sync-run failed to start; next Stop retries */ });
       child.unref();
     }
   } catch {
     // The next Stop, or the next query, brings the graph up to date.
+  }
+}
+
+/**
+ * [graft-Max T6] auto incremental index after an edit — default ON.
+ *
+ * graft's own freshness story is query-time (ensureFreshGraph) + Stop-time
+ * (startSync); between the edit and the next Stop the graph lags. This hook
+ * closes that gap: the same detached, lock-guarded sync-run build fires right
+ * after handlePostEdit marks the graph dirty, so max_find_code sees new
+ * symbols within seconds of the edit instead of at turn end.
+ *
+ * Cost guards, in order:
+ *   - GRAFT_MAX_AUTO_INDEX=0 turns it off entirely (session env, no settings
+ *     rewrite needed — the hook event `post-edit` is already registered).
+ *   - Throttle: a sync that completed less than GRAFT_MAX_SYNC_THROTTLE_MS
+ *     ago (default 60s) suppresses another start. Correctness never depends
+ *     on this hook (the query-time gate re-checks the fingerprint), so the
+ *     throttle is purely cost control; the next Stop or query catches up.
+ *   - The `syncing` lock (acquireLock) still prevents pileups: while a build
+ *     runs, further edits only flip dirty and return.
+ */
+export function autoIndexAfterEdit(dir: string, now = Date.now()): void {
+  try {
+    if (process.env.GRAFT_MAX_AUTO_INDEX === '0') return;
+    const syncRun = process.env.GRAFT_TEST_SYNC_RUN ?? claudeScriptPath('sync-run.js');
+    if (!existsSync(syncRun)) return;
+    const stats = readStats(dir);
+    if (!stats?.dirty) return; // nothing this edit marked — not ours to start
+    const throttleMs = Number(process.env.GRAFT_MAX_SYNC_THROTTLE_MS ?? 60_000);
+    if (throttleMs > 0 && stats.syncedAt && Number.isFinite(Date.parse(stats.syncedAt))
+      && now - Date.parse(stats.syncedAt) < throttleMs) {
+      return; // synced moments ago; next Stop/query picks this edit up
+    }
+    if (stats.syncing || !acquireLock(dir)) return; // a build already runs
+    patchStats(dir, { syncing: true });
+    const child = spawn(process.execPath, [syncRun, dir], { detached: true, stdio: 'ignore', windowsHide: true });
+    // [S2 review] an un-listened 'error' (bad node path) is an uncaught exception
+    child.on('error', () => { /* sync-run failed; dirty stays, next Stop/query catches up */ });
+    child.unref();
+  } catch {
+    // Same fail-soft contract as startSync: the next Stop or query catches up.
   }
 }
 

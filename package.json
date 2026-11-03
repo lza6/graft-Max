@@ -1,6 +1,6 @@
 {
   "name": "graft-max",
-  "version": "0.28.0-max.1",
+  "version": "0.28.0-max.7",
   "description": "[graft-Max] Self-developed fork of graft (nanonets/graft v0.28.0) - repo context graph + planned unified MCP aggregation for our toolchain.",
   "keywords": [
     "ai",
@@ -14,11 +14,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/trailhq/Trail-Code.git"
+    "url": "git+https://github.com/lza6/graft-Max.git"
   },
-  "homepage": "https://github.com/trailhq/Trail-Code#readme",
+  "homepage": "https://github.com/lza6/graft-Max#readme",
   "bugs": {
-    "url": "https://github.com/trailhq/Trail-Code/issues"
+    "url": "https://github.com/lza6/graft-Max/issues"
   },
   "publishConfig": {
     "access": "public"
@@ -34,7 +34,9 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "graft": "dist/bin/graft.js"
+    "graft": "dist/bin/graft.js",
+    "graft-max": "dist/bin/graft.js",
+    "trail": "dist/bin/trail.js"
   },
   "files": [
     "dist",

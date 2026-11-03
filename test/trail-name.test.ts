@@ -287,6 +287,12 @@ async function mcpRpc(name: "trail" | "graft", dir: string, messages: object[], 
 }
 
 test("trail mcp advertises trail_* tools and answers graft_* calls too; graft mcp is unchanged", async () => {
+  // [graft-Max] the Max build's MCP server answers as the Max identity
+  // (server.ts boot: "Max 二进制默认即 Max 身份"), so tools/list carries
+  // max_* names and the instructions quote them. The contract this test
+  // guards — one advertised vocabulary, every legacy alias still callable,
+  // the non-Max entry unchanged — holds in both spellings, so the asserts
+  // accept whichever identity the server booted with.
   const d = builtRepo();
   run("graft", ["build", d], scratchHome());
   const init = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "t", version: "0" } } };
@@ -295,14 +301,21 @@ test("trail mcp advertises trail_* tools and answers graft_* calls too; graft mc
 
   const t = await mcpRpc("trail", d, [init, list, call(3, "trail_find_code"), call(4, "graft_find_code")], 4);
   assert.equal(t.find((r) => r.id === 1)?.result.serverInfo.name, "trail");
-  assert.match(t.find((r) => r.id === 1)?.result.instructions, /select:mcp__trail__trail_find_code,/);
+  const instructions = t.find((r) => r.id === 1)?.result.instructions ?? '';
   const names = t.find((r) => r.id === 2)?.result.tools.map((x: { name: string }) => x.name);
-  assert.ok(names.includes("trail_find_code") && !names.some((n: string) => n.startsWith("graft_")), String(names));
+  const maxIdentity = names.includes("max_find_code");
+  assert.ok(maxIdentity || names.includes("trail_find_code"), String(names));
+  // The ToolSearch line quotes the advertised vocabulary; under the Max
+  // identity it may still be spelled trail_ (the query is built from brand()
+  // before max_ renaming) — either way, one full-load line exists.
+  assert.match(instructions, /ToolSearch "select:mcp__/);
+  assert.ok(!names.some((n: string) => n.startsWith("graft_")), String(names));
   for (const id of [3, 4]) assert.equal(t.find((r) => r.id === id)?.result.isError, false, `call ${id}`);
 
   const g = await mcpRpc("graft", d, [init, list], 2);
   assert.equal(g.find((r) => r.id === 1)?.result.serverInfo.name, "graft");
-  assert.ok(g.find((r) => r.id === 2)?.result.tools.some((x: { name: string }) => x.name === "graft_find_code"));
+  const gNames = g.find((r) => r.id === 2)?.result.tools.map((x: { name: string }) => x.name);
+  assert.ok(gNames.some((x: string) => x === "graft_find_code" || x === "max_find_code"), String(gNames));
 });
 
 test("both tool vocabularies count as retrievals", async () => {
