@@ -17,7 +17,7 @@
 import { appendFile, mkdir, rename, readFile, writeFile, stat, unlink } from 'node:fs/promises';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { homedir, userInfo } from 'node:os';
+import { homedir, userInfo, hostname } from 'node:os';
 
 export const GRAFT_MAX_HOME = join(homedir(), '.graft-max');
 export const DEFAULT_LOG = join(GRAFT_MAX_HOME, 'mcp.log');
@@ -146,6 +146,12 @@ export function dlogBlock(title: string, body: string): void {
 
 export interface SessionRow {
   pid: number;
+  /** [Docker] 容器里每个进程都是 pid 1 —— 只用 pid 做身份会让多容器互相覆盖，
+   * 所以身份是 host+pid；host 取 os.hostname()（Docker 默认=容器短 ID）。 */
+  host?: string;
+  /** 最近一次活动时间（工具调用时刷新）。跨容器无法用 kill(pid,0) 探活，
+   * 改用这个时间戳判活。 */
+  lastSeen?: string;
   /** Normalized forward-slash repo path (comparisons are separator-agnostic). */
   cwd: string;
   /** Process id of whoever spawned us (the agent/editor) — "who". */
@@ -156,6 +162,31 @@ export interface SessionRow {
   endedAt: string | null;
   /** Requests served this session, for the dashboard's activity column. */
   requests: number;
+}
+
+
+/** 本机（容器）标识：Docker 默认把容器短 ID 设为 hostname，宿主则是机器名。 */
+function myHost(): string {
+  try { return hostname(); } catch { return 'unknown'; }
+}
+const myselfId = (): string => myHost() + ':' + process.pid;
+/** 跨容器判活窗口：别的 host 的会话拿不到它的 pid，只能靠 lastSeen 新鲜度。 */
+const REMOTE_STALE_MS = 3 * 60_000;
+
+let lastTouch = 0;
+/** 工具调用时刷新本会话的 lastSeen（20s 节流，避免每次调用都写盘）。 */
+export function touchSession(): void {
+  const now = Date.now();
+  if (now - lastTouch < 20_000) return;
+  lastTouch = now;
+  try {
+    const me = myHost();
+    const rows = readSessions();
+    const mine = rows.find((r) => (r.host ?? me) === me && r.pid === process.pid);
+    if (!mine) return;
+    mine.lastSeen = new Date(now).toISOString();
+    writeSessions(rows);
+  } catch {/* best effort */}
 }
 
 function readSessions(): SessionRow[] {
@@ -192,7 +223,8 @@ function alive(pid: number): boolean {
 /** Register this server instance. Called once at boot. */
 export function registerSession(root: string, version: string): void {
   try {
-    const rows = readSessions().filter((r) => r.pid !== process.pid);
+    const me = myselfId();
+    const rows = readSessions().filter((r) => `${r.host ?? me}` + ':' + r.pid !== me);
     rows.push({
       pid: process.pid,
       cwd: root.split('\\').join('/'),
@@ -206,6 +238,8 @@ export function registerSession(root: string, version: string): void {
       startedAt: new Date().toISOString(),
       endedAt: null,
       requests: 0,
+      host: myHost(),
+      lastSeen: new Date().toISOString(),
     });
     mkdirSync(GRAFT_MAX_HOME, { recursive: true });
     writeFileSync(SESSIONS_FILE, JSON.stringify(rows, null, 1), 'utf8');
@@ -254,7 +288,17 @@ export function endSession(): void {
 /** Live sessions for the dashboard: ended rows dropped, dead pids pruned. */
 export function liveSessions(): SessionRow[] {
   const rows = readSessions();
-  const live = rows.filter((r) => !r.endedAt && alive(r.pid));
+  const me = myHost();
+  const now = Date.now();
+  // [Docker] 同一 host 才能用 kill(pid,0) 探活；别的容器（host 不同）靠 lastSeen 新鲜度，
+  // 否则容器里"pid 1 永远活着"会把别的容器的死会话永远显示成 LIVE。
+  const isLive = (r: SessionRow): boolean => {
+    if (r.endedAt) return false;
+    if ((r.host ?? me) === me) return alive(r.pid);
+    const t = Date.parse(r.lastSeen ?? r.startedAt ?? '');
+    return Number.isFinite(t) && now - t < REMOTE_STALE_MS;
+  };
+  const live = rows.filter(isLive);
   // prune everything not live, write back only when something actually went away
   if (live.length !== rows.length) writeSessions(live);
   return live.sort((a, b) => a.startedAt.localeCompare(b.startedAt));

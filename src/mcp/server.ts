@@ -18,7 +18,7 @@ import { KeptListing, within } from './kept-listing.js';
 // [graft-Max] sibling-tool federation: qmd/gitnexus proxied through this server.
 import { availableFederatedTools, callFederatedTool, FEDERATED_TOOL_NAMES, shutdownFederatedSessions } from './federation.js';
 // [graft-Max] developer log (GRAFT_MAX_LOG=1 or a path; default ~/.graft-max/mcp.log)
-import { dlog, dlogBlock, clip, logPath, registerSession, endSession, bumpRequests } from './devlog.js';
+import { dlog, dlogBlock, clip, logPath, registerSession, endSession, bumpRequests, touchSession } from './devlog.js';
 import { startDashboard } from './dashboard.js';
 // [graft-Max] 全局提示词注入（GRAFT_MAX_MCP=1 时生效，切回原版即摘除）
 import { upsertGlobalPrompt, removeGlobalPrompt, ensurePromptBlock } from '../hosts/max-prompt.js';
@@ -286,6 +286,7 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
       case 'tools/call': {
         if (isNotification) return;
         let name = String(params?.name ?? '');
+        touchSession(); // [Docker] 刷新本会话 lastSeen（跨容器判活靠它）
         const args = (params?.arguments ?? {}) as Record<string, unknown>;
         // [graft-Max] name resolution order matters:
         //   1. federated tools are natively max_* — route them FIRST, before

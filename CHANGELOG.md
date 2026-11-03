@@ -16,6 +16,10 @@
   手动"刷新"始终有效。
 - **版本号显示 dev**：`readCurrentVersion` 按 `dist/cli.js` 形状找 package.json，而本模块在
   `dist/mcp/` 深一层 → 改为向上最多 3 级查找。
+- **多容器会话互相覆盖**：会话注册表用 OS pid 当唯一键，而容器里每个进程都是 `pid 1` —
+  两个 MCP 容器会把彼此的行覆盖掉，面板只剩一个。现在身份改为 `host+pid`（host 取
+  `os.hostname()`，Docker 默认是容器短 ID），并新增 `lastSeen`（工具调用时 20s 节流刷新）：
+  同 host 用 `kill(pid,0)` 探活，跨容器用 lastSeen 3 分钟窗口判活。会话表新增容器标识徽章。
 
 ### 变更 · 面板视觉与交互重做
 - 设计系统：统一 token（颜色/圆角/阴影/间距），亮暗双主题，首次跟随系统偏好再持久化用户选择

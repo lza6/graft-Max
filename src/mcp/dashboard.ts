@@ -488,7 +488,7 @@ async function loadSessions(){
         '<td class="mono">'+esc(s.pid)+'</td>'+
         '<td>'+esc(s.user)+'</td>'+
         '<td class="mono path" title="'+esc(s.cwd)+'">'+esc(s.cwd)+'</td>'+
-        '<td class="mono muted">'+esc(s.hostPid==null?'?':s.hostPid)+' '+esc(String(s.hostCmd||'').split(/[\\\\/]/).pop())+'</td>'+
+        '<td class="mono muted">'+esc(s.hostPid==null?'?':s.hostPid)+' '+esc(String(s.hostCmd||'').split(/[\\\\/]/).pop())+(s.host?' <span class="tag none">'+String(s.host).slice(0,8)+'</span>':'')+'</td>'+
         '<td class="mono">'+esc(s.requests)+'</td>'+
         '<td class="muted">'+esc(new Date(s.startedAt).toLocaleString('zh-CN'))+'</td></tr>')}
     setPill(true);
