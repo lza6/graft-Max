@@ -33,7 +33,7 @@ export function maxGlobalPrompt(): string {
    六件套同一个 server。
 3. 仓库没有图谱时**不要让用户手动初始化**：第一次查询会自动建图（几十秒），
    提示"building in the background"就稍后重问即可。
-4. 面板：\`http://127.0.0.1:24688\` 实时查看工具调用日志与会话（GRAFT_MAX_UI=1 时）。
+4. 面板：\`http://127.0.0.1:24688\` 实时查看工具调用日志/会话/存储占用（GRAFT_MAX_UI=1 时；端口被占自动 +1~+9，以 MCP server 启动 stderr 打印的实际地址为准）。
 ${MAX_PROMPT_END}`;
 }
 

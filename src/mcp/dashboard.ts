@@ -114,28 +114,38 @@ function dirSize(dir: string, depth = 0): number {
 
 async function storageEntries(root: string): Promise<StorageEntry[]> {
   const trailHome = process.env.TRAIL_HOME ?? join(homedir(), '.trail');
+  const cacheDir = process.env.XDG_CACHE_HOME
+    ? join(process.env.XDG_CACHE_HOME, 'qmd')
+    : join(homedir(), '.cache', 'qmd');
   const candidate: Array<[label: string, path: string, kind: StorageEntry['kind']]> = [
     ['开发者日志（滚动 5MB）', logPath(), 'file'],
     ['会话注册表', SESSIONS_FILE, 'file'],
-    [' Trail 全局状态（learnings/sessions）', trailHome, 'dir'],
+    ['Trail 全局状态（learnings/sessions）', trailHome, 'dir'],
     ['graft-Max 主目录', GRAFT_MAX_HOME, 'dir'],
+    // [需求补全] 用户点名的"数据库 DB"：max_find_docs 的 BM25 库就是这份 SQLite
+    ['qmd 文档索引数据库（SQLite + WAL）', join(cacheDir, 'index.sqlite'), 'file'],    ['qmd 嵌入模型缓存', join(cacheDir, 'models'), 'dir'],
   ];
   // per-repo artifacts for the repo this server serves
   const repo: Array<[label: string, path: string, kind: StorageEntry['kind']]> = [
     ['本仓库图谱 graft/（节点+缓存）', join(root, 'graft'), 'dir'],
     ['本仓库 Trail 状态 .trail/', join(root, '.trail'), 'dir'],
     ['本仓库语义索引 .cocoindex_code/', join(root, '.cocoindex_code'), 'dir'],
+    // [需求补全] max_trace_arch 的架构图索引（gitnexus analyze 产物）
+    ['本仓库架构图索引 .gitnexus/', join(root, '.gitnexus'), 'dir'],
   ];
   const out: StorageEntry[] = [];
   for (const [label, p, kind] of [...candidate, ...repo]) {
     let bytes = 0;
-    let ok = false;
     try {
       bytes = kind === 'dir' ? dirSize(p) : statSync(p).size;
-      ok = true;
+      // [review r4] SQLite 伴生文件（-wal/-shm）常占大头，一并计入
+      if (kind === 'file' && p.endsWith('.sqlite')) {
+        for (const side of ['-wal', '-shm']) {
+          try { bytes += statSync(p + side).size; } catch {/* no sidecar */}
+        }
+      }
     } catch {/* absent — still listed with 0 */}
     out.push({ label: label.trim(), path: p, bytes, kind });
-    void ok;
   }
   return out;
 }
@@ -147,9 +157,10 @@ function human(bytes: number): string {
   return bytes + ' B';
 }
 
-function page(): string {
+function page(port = DEFAULT_PORT): string {
   // [graft-Max] 设计语言对齐上游 viewer（style.css 的 tokens）：同一套
   // --bg/--panel/--ink/--accent 变量，亮暗双主题自动跟随系统，可手动切。
+  // [需求补全] 端口动态渲染：端口被占自动偏移后，卡片不能显示错误地址。
   return `<!doctype html>
 <html lang="zh" data-theme="dark"><head><meta charset="utf-8"><title>graft-Max Dashboard</title>
 <style>
@@ -209,14 +220,14 @@ tr:last-child td{border-bottom:none}
   <div class="card"><div class="k">日志大小</div><div class="v" id="cLog">–</div></div>
   <div class="card"><div class="k">建图状态</div><div class="v" id="cBuilding" style="font-size:15px">–</div></div>
   <div class="card"><div class="k">工具耗时 <small>（近 800 行日志）</small></div><div class="v" id="cTools" style="font-size:13px">–</div></div>
-  <div class="card"><div class="k">面板地址</div><div class="v" style="font-size:13px">127.0.0.1:24688<br><small>实时日志 / 会话 / 统计</small></div></div>
+  <div class="card"><div class="k">面板地址</div><div class="v" style="font-size:13px"><a href="http://127.0.0.1:${port}" style="color:var(--accent,#4c7dff)">127.0.0.1:${port}</a><br><small>实时日志 / 会话 / 统计 / 存储</small></div></div>
 </div>
 <h2><span class="dot"></span>活跃会话 · 谁正在使用</h2>
 <table id="sess"><thead><tr><th>状态</th><th>pid</th><th>用户</th><th>仓库</th><th>宿主进程</th><th>请求数</th><th>启动时间</th></tr></thead><tbody></tbody></table>
+<h2>存储 / 产物 <span class="badge">本工具落盘的全部路径与占用（30s 刷新）</span></h2>
+<table id="store"><thead><tr><th>产物</th><th>类型</th><th>大小</th><th>路径</th><th></th></tr></thead><tbody></tbody></table>
 <h2>实时日志 <span class="badge">自动刷新 <input id="ms" value="2000"> ms</span></h2>
 <div id="log"></div>
-<h2>存储 / 产物 <span class="badge">本工具落盘的全部路径与占用</span></h2>
-<table id="store"><thead><tr><th>产物</th><th>类型</th><th>大小</th><th>路径</th><th></th></tr></thead><tbody></tbody></table>
 </div>
 <script>
 let timer=null;
@@ -284,13 +295,15 @@ document.getElementById('ms').addEventListener('change', startTimer);
 export function startDashboard(explicitPort?: number, root = process.cwd()): void {
   const want = process.env.GRAFT_MAX_UI;
   if (!want || want === '0') return; // opt-in only
-  const port = explicitPort ?? ((want && want !== '1' ? parseInt(want) : DEFAULT_PORT) || DEFAULT_PORT);
+  // `let`: the EADDRINUSE retry below re-listens on port+1 and the request
+  // handlers (page(port)) must render the ACTUAL port, not the wanted one.
+  let port = explicitPort ?? ((want && want !== '1' ? parseInt(want) : DEFAULT_PORT) || DEFAULT_PORT);
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     try {
       if (url.pathname === '/') {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        res.end(page());
+        res.end(page(port));
       } else if (url.pathname === '/tail') {
         const n = Math.min(2000, Math.max(1, parseInt(url.searchParams.get('n') ?? '200')));
         const lines = await tailLines(n);
@@ -322,6 +335,10 @@ export function startDashboard(explicitPort?: number, root = process.cwd()): voi
           // [graft-Max T9] per-tool stats for the 耗时趋势 card
           toolStats: await toolStats(),
         });
+      } else if (url.pathname === '/favicon.ico') {
+        // [UI 审计] 浏览器自动请求；404 会污染控制台——内联 SVG 图标零请求
+        res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' });
+        res.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="4" fill="#4c7dff"/><text x="8" y="12" font-size="10" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="700">M</text></svg>');
       } else if (url.pathname === '/storage') {
         // [graft-Max T9.2] 本工具全部落盘产物的路径+大小
         json(res, 200, { root, entries: await storageEntries(root) });
@@ -332,7 +349,15 @@ export function startDashboard(explicitPort?: number, root = process.cwd()): voi
       json(res, 500, { error: e instanceof Error ? e.message : String(e) });
     }
   });
-  server.on('error', () => {
+  server.on('error', (e: Error & { code?: string }) => {
+    // [需求补全] 端口被占自动偏移 +1~+9（历史行为回归了：之前只软失败不换端口，
+    // 多会话并存时后启动的面板直接消失）。全忙才真放弃。
+    if ((e.code === 'EADDRINUSE' || e.code === 'EACCES') && !explicitPort && port < DEFAULT_PORT + 9) {
+      dlog(`dashboard: port ${port} busy — trying ${port + 1}`);
+      port += 1;
+      server.listen(port, '127.0.0.1');
+      return;
+    }
     dlog(`dashboard: port ${port} busy — UI not started (MCP unaffected)`);
   });
   server.listen(port, '127.0.0.1', () => {
