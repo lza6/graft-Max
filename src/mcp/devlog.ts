@@ -17,7 +17,7 @@
 import { appendFile, mkdir, rename, readFile, writeFile, stat, unlink } from 'node:fs/promises';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 
 export const GRAFT_MAX_HOME = join(homedir(), '.graft-max');
 export const DEFAULT_LOG = join(GRAFT_MAX_HOME, 'mcp.log');
@@ -198,7 +198,11 @@ export function registerSession(root: string, version: string): void {
       cwd: root.split('\\').join('/'),
       hostPid: process.ppid ?? null,
       hostCmd: shortHostCmd(),
-      user: process.env.USERNAME ?? process.env.USER ?? 'unknown',
+      // [Docker] Linux 容器里没有 USERNAME/USER 环境变量（除特别 ENV），
+      // 退到 os.userInfo() 才拿得到 'node'，否则面板永远显示 unknown。
+      user: process.env.USERNAME ?? process.env.USER ?? (() => {
+        try { return userInfo().username || 'unknown'; } catch { return 'unknown'; }
+      })(),
       startedAt: new Date().toISOString(),
       endedAt: null,
       requests: 0,

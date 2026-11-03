@@ -5,6 +5,27 @@
 
 ## [0.28.0-max.7] — 2026-11
 
+### 新增 · Docker 部署
+- **`Dockerfile.max`**：MCP stdio + 可选 Dashboard 镜像（与上游 GitHub App 的 `Dockerfile` 物理分离）
+  - 多阶段构建：build 阶段装 python3/make/g++ 编译 tree-sitter 语法，运行阶段只留 git/ca-certificates/curl
+  - 非 root 运行（`USER node`），仓库以 volume 挂到 `/workspace`，建图产物写回挂载目录
+  - 联邦后端可选：`INSTALL_QMD=1`（默认）、`INSTALL_CCC`/`INSTALL_GITNEXUS` 按需；未装由 probe 门控自动隐藏
+  - **国内网络默认可用**：apt → `mirrors.aliyun.com`、npm → `registry.npmmirror.com`（容器内实测直连可达），
+    无需代理、无需 `--network=host`；海外用 `--build-arg APT_MIRROR=deb.debian.org NPM_REGISTRY=...` 切回官方源
+- **`docker-compose.max.yml`**：dashboard 常驻一键起（端口映射 + healthcheck 打 /stats + qmd 索引与日志卷持久化）
+- **`GRAFT_MAX_LEASH=0`**：关闭 stdin-leash，常驻容器必需（容器无 MCP 宿主 stdin，否则启动即退出 / 10 分钟自杀）
+- **`e2e/e2e-docker.mjs`**：真实容器 E2E（版本 / MCP 握手 / 真实工具调用 / 面板+存储 / 非 root / 常驻存活）
+- **`GRAFT_MAX_UI_HOST`**：面板绑定地址（默认 127.0.0.1）。**修 bug**：dashboard 原本写死绑
+  127.0.0.1，容器里 `-p 24688:24688` 映射打不进去（Docker DNAT 目标是容器 eth0 不是 loopback），
+  镜像内默认 `0.0.0.0`
+- **构建体积/耗时实测**：默认镜像（含 qmd）3.2GB，构建 ~60s；`INSTALL_QMD=0` 瘦身版 977MB。
+  快的原因是原生 tree-sitter 语法全是 devDependencies、运行时走 WASM，`npm ci --ignore-scripts`
+  跳过编译即可 —— 不需要 python3/make/g++（gcc-12/g++-12 各约 40MB，国内极易卡死）
+- Dashboard 迭代：标题版本号动态读取（不再写死）、产物未创建时显示「未创建」而非 `0 B`、
+  容器内用户名回退 `os.userInfo()`（原来显示 unknown）
+- README 增《Docker 部署》章节；docs-selfdev/项目约束.md 增 §7 Docker 约束
+
+
 ### 新增
 - **T2 进程内嵌 qmd**（`src/mcp/fed-qmd.ts`）：max_find_docs 直连 qmd SDK
   （动态 import，绕过 top-level-await ESM 的 ERR_REQUIRE_ASYNC_MODULE），

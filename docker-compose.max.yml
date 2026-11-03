@@ -1,0 +1,56 @@
+# graft-Max MCP + Dashboard 一键编排（Windows Docker Desktop 实测）
+#
+#   # 有代理的机器（国内常见）：先导出构建期代理，再 up
+#   $env:HTTP_PROXY_BUILD="http://host.docker.internal:10808"
+#   $env:HTTPS_PROXY_BUILD="http://host.docker.internal:10808"
+#   docker compose -f docker-compose.max.yml up -d --build   # 首次带 --build
+#
+#   docker compose -f docker-compose.max.yml up -d          # 后台起 dashboard 常驻容器
+#   docker compose -f docker-compose.max.yml logs -f max    # 看日志
+#   docker compose -f docker-compose.max.yml down           # 收掉
+#
+# MCP stdio 模式不进 compose（宿主的 MCP 宿主要 -i 前台驱动），用：
+#   docker run -i --rm -v "你的仓库绝对路径:/workspace" graft-max mcp
+#
+# REPO_DIR 默认 duck2api-hub（本机授权 E2E 实验仓库），可环境变量覆盖：
+#   REPO_DIR=D:\some\repo docker compose -f docker-compose.max.yml up -d
+services:
+  max:
+    build:
+      context: .
+      dockerfile: Dockerfile.max
+      # 国内网络必需：buildkit 构建容器在独立网络命名空间，只有 host 网络能到宿主代理
+      network: host
+      args:
+        # 不需要代理的机器删掉这三行即可
+        HTTP_PROXY: ${HTTP_PROXY_BUILD:-}
+        HTTPS_PROXY: ${HTTPS_PROXY_BUILD:-}
+        NO_PROXY: localhost,127.0.0.1
+    image: graft-max:latest
+    container_name: graft-max-dashboard
+    restart: unless-stopped
+    environment:
+      GRAFT_MAX_UI: "24688"
+      GRAFT_MAX_LOG: "1"
+      GRAFT_MAX_MCP: "1"
+      # 常驻 dashboard 容器没有 MCP 宿主 stdin：关掉 leash，否则 10 分钟自退
+      GRAFT_MAX_LEASH: "0"
+      GRAFT_MAX_UI_HOST: "0.0.0.0"
+    ports:
+      - "24688:24688"
+    # dashboard 是这条服务的外部可见面，健康检查打它（stdio 模式不用 compose，无需此检查）
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:24688/stats').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    volumes:
+      - ${REPO_DIR:-C:\Users\Administrator.DESKTOP-EGNE9ND\Desktop\duck-2api\duck2api-hub}:/workspace
+      # 图谱产物写回宿主仓库（graft/ .trail/），容器重建不丢
+      - qmd-index:/home/node/.cache/qmd
+      # 日志 / 会话注册表持久化（面板读的就是这份）
+      - max-home:/home/node/.graft-max
+volumes:
+  qmd-index:
+  max-home:

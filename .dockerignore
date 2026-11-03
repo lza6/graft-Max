@@ -8,3 +8,12 @@ data
 graft
 .claude
 *.log
+
+# [graft-Max] 本机运行时与大文件，不进 build context
+memories.db*
+.trail
+.trail/
+改进计划/archive/memories.db.backup-*
+e2e/*.png
+docs/
+vendors

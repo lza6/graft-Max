@@ -66,3 +66,22 @@ $env:E2E_ROOT="C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code"; node 
   仓库 graft/ 12.6MB、.trail/ 0B、.cocoindex_code/ 60MB）路径+大小全部正确
 - Playwright：表 7 行渲染、复制按钮反馈"已复制"、轮询解耦实证（7s: /stats×4, /storage×1）
 - 截图：dashboard-storage.png（暗色主题存储表）、dashboard-full.png（全页）
+
+## Docker 部署 E2E（max.7，e2e/e2e-docker.mjs 9/9）
+
+真实容器、真实 MCP stdio 协议、真实 dashboard HTTP。镜像 `graft-max:latest`（3.2GB，构建 ~60s）。
+
+| 用例 | 结果 | 证据 |
+|------|------|------|
+| D1 镜像内版本 | ✅ | `0.28.0-max.7` |
+| D5 非 root | ✅ | `uid=node` |
+| D2 MCP initialize | ✅ | `server=graft v=0.28.0-max.7` |
+| D2 tools/list 六件套+联邦 | ✅ | max_find_code…max_repo_map(+max_find_docs) |
+| D3 真实工具调用（挂载仓库） | ✅ | `[graft] tokens saved ≈ 5,893 (99%)` |
+| D6 常驻存活（leash 关） | ✅ | State.Running=true, dashboardReady=true |
+| D4 /stats 真实响应 | ✅ | 真实 HTTP |
+| D4 /storage 真实响应 | ✅ | 10 条产物（容器路径 /workspace/graft 等） |
+| D4 日志 boot 行 | ✅ | stderr 面板地址 + 日志文件 boot 行 |
+
+UI 截图：`e2e/docker-dashboard.png`（Playwright 真实浏览器：主题切换持久化、复制按钮反馈"已复制"、
+刷新按钮触发请求、存储表 10 行含 qmd DB/.gitnexus、零 JS 错误）

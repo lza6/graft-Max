@@ -19,6 +19,8 @@ import { dlog, logPath, liveSessions, SESSIONS_FILE, GRAFT_MAX_HOME, type Sessio
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const DEFAULT_PORT = 24688;
 
@@ -88,7 +90,7 @@ function json(res: ServerResponse, code: number, body: unknown): void {
  * absolute path and on-disk size (directories measured with one recursive
  * walk, depth-capped). Feeds the 存储/产物 card so "where is my data and how
  * big is it" is answerable from the panel without opening a terminal. */
-interface StorageEntry { label: string; path: string; bytes: number; kind: 'file' | 'dir' }
+interface StorageEntry { label: string; path: string; bytes: number; kind: 'file' | 'dir'; exists: boolean }
 
 function dirSize(dir: string, depth = 0): number {
   let total = 0;
@@ -136,16 +138,18 @@ async function storageEntries(root: string): Promise<StorageEntry[]> {
   const out: StorageEntry[] = [];
   for (const [label, p, kind] of [...candidate, ...repo]) {
     let bytes = 0;
+    let exists = false;
     try {
       bytes = kind === 'dir' ? dirSize(p) : statSync(p).size;
+      exists = true;
       // [review r4] SQLite 伴生文件（-wal/-shm）常占大头，一并计入
       if (kind === 'file' && p.endsWith('.sqlite')) {
         for (const side of ['-wal', '-shm']) {
           try { bytes += statSync(p + side).size; } catch {/* no sidecar */}
         }
       }
-    } catch {/* absent — still listed with 0 */}
-    out.push({ label: label.trim(), path: p, bytes, kind });
+    } catch {/* absent — still listed, marked 未创建 */}
+    out.push({ label: label.trim(), path: p, bytes, kind, exists });
   }
   return out;
 }
@@ -155,6 +159,29 @@ function human(bytes: number): string {
   if (bytes >= 1024 ** 2) return (bytes / 1024 ** 2).toFixed(1) + ' MB';
   if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return bytes + ' B';
+}
+
+/**
+ * 面板标题里的版本号。本模块在 dist/mcp/ 比 dist/cli.js 深一层，
+ * cli-meta 的 readCurrentVersion 只按后者形状找，所以这里自己向上找
+ * package.json（最多 3 级），失败退回 'dev'。
+ */
+let cachedVersion: string | null = null;
+function panelVersion(): string {
+  if (cachedVersion) return cachedVersion;
+  try {
+    let dir = dirname(fileURLToPath(import.meta.url));
+    for (let i = 0; i < 3; i++) {
+      const pkg = join(dir, 'package.json');
+      if (existsSync(pkg)) {
+        const v = (JSON.parse(readFileSync(pkg, 'utf8')) as { version?: string }).version;
+        if (v) { cachedVersion = v; return v; }
+      }
+      dir = dirname(dir);
+    }
+  } catch {/* fall through */}
+  cachedVersion = 'dev';
+  return cachedVersion;
 }
 
 function page(port = DEFAULT_PORT): string {
@@ -208,7 +235,7 @@ tr:last-child td{border-bottom:none}
 <div class="wrap">
 <header>
   <div class="logo">M</div>
-  <div><h1>graft-Max Dashboard</h1><div class="ver">v0.28.0-max · 仓库上下文图谱 + 联邦工具</div></div>
+  <div><h1>graft-Max Dashboard</h1><div class="ver">v${panelVersion()} · 仓库上下文图谱 + 联邦工具</div></div>
   <div class="sp"></div>
   <button onclick="toggleTheme()" title="切换亮暗">🌓 主题</button>
   <button class="primary" onclick="poll(true)">刷新</button>
@@ -259,7 +286,7 @@ async function loadStorage(){
   try{const s=await (await fetch('/storage')).json();
   const tb=document.querySelector('#store tbody');tb.innerHTML='';
   for(const e of s.entries){tb.insertAdjacentHTML('beforeend',
-    '<tr><td>'+esc(e.label)+'</td><td class=muted>'+(e.kind==='dir'?'目录':'文件')+'</td><td class=mono>'+fmtBytes(e.bytes)+'</td><td class=mono style=max-width:420px;word-break:break-all>'+esc(e.path)+'</td><td><button style="padding:2px 8px;font-size:11px" onclick="copyPath(this)" data-p="'+esc(e.path)+'">复制</button></td></tr>')}
+    '<tr><td>'+esc(e.label)+'</td><td class=muted>'+(e.kind==='dir'?'目录':'文件')+'</td><td class=mono>'+(e.exists?fmtBytes(e.bytes):'<span class=muted>未创建</span>')+'</td><td class=mono style=max-width:420px;word-break:break-all>'+esc(e.path)+'</td><td><button style="padding:2px 8px;font-size:11px" onclick="copyPath(this)" data-p="'+esc(e.path)+'">复制</button></td></tr>')}
   }catch(e){}
 }
 function copyPath(btn){try{navigator.clipboard.writeText(btn.dataset.p);btn.textContent='已复制';setTimeout(()=>{btn.textContent='复制'},1200)}catch(e){}}
@@ -298,6 +325,9 @@ export function startDashboard(explicitPort?: number, root = process.cwd()): voi
   // `let`: the EADDRINUSE retry below re-listens on port+1 and the request
   // handlers (page(port)) must render the ACTUAL port, not the wanted one.
   let port = explicitPort ?? ((want && want !== '1' ? parseInt(want) : DEFAULT_PORT) || DEFAULT_PORT);
+  // [Docker] 容器内必须绑 0.0.0.0 才能被 -p 端口映射打到（Docker DNAT 目标
+  // 是容器 eth0，不是 loopback）。默认仍是 127.0.0.1，宿主用法不变、永不外露。
+  const bindHost = process.env.GRAFT_MAX_UI_HOST ?? '127.0.0.1';
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     try {
@@ -355,14 +385,14 @@ export function startDashboard(explicitPort?: number, root = process.cwd()): voi
     if ((e.code === 'EADDRINUSE' || e.code === 'EACCES') && !explicitPort && port < DEFAULT_PORT + 9) {
       dlog(`dashboard: port ${port} busy — trying ${port + 1}`);
       port += 1;
-      server.listen(port, '127.0.0.1');
+      server.listen(port, bindHost);
       return;
     }
     dlog(`dashboard: port ${port} busy — UI not started (MCP unaffected)`);
   });
-  server.listen(port, '127.0.0.1', () => {
-    dlog(`dashboard: http://127.0.0.1:${port} (tail / sessions / stats)`);
+  server.listen(port, bindHost, () => {
+    dlog(`dashboard: http://${bindHost}:${port} (tail / sessions / stats / storage)`);
     // Make the URL findable even without reading logs.
-    console.error(`[graft-Max] dashboard: http://127.0.0.1:${port}`);
+    console.error(`[graft-Max] dashboard: http://${bindHost}:${port}`);
   });
 }

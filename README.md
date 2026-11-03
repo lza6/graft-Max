@@ -199,7 +199,78 @@ grep、重构先 trace_calls 等）。幂等三态：created/updated/unchanged�
 - 亮暗双主题（🌓 切换），设计 tokens 对齐上游 viewer
 - 端口被占自动 +1~+9；只绑 127.0.0.1 永不暴露网络
 
-截图见 `e2e/dashboard-dark.png` / `e2e/dashboard-light.png`。
+截图见 `e2e/dashboard-dark.png` / `e2e/dashboard-light.png` / `e2e/dashboard-storage.png`（存储视图）。
+
+---
+
+## Docker 部署
+
+镜像定义在 `Dockerfile.max`（与上游 GitHub App 的 `Dockerfile` 完全独立：那个是 HTTP webhook 服务，
+这个是 MCP stdio + 可选 Dashboard）。编排文件 `docker-compose.max.yml`。
+
+### 构建
+
+```powershell
+docker build -f Dockerfile.max -t graft-max:latest .
+```
+
+**国内网络开箱可用**：apt 走 `mirrors.aliyun.com`、npm 走 `registry.npmmirror.com`
+（容器内实测直连可达），不需要代理、不需要 `--network=host`。
+海外或要走代理时覆盖：`--build-arg APT_MIRROR=deb.debian.org --build-arg NPM_REGISTRY=https://registry.npmjs.org`。
+
+**构建很快（~20-60 秒）的原因**：所有原生 tree-sitter 语法包都是 devDependencies，
+运行时用 WASM 语法（`tree-sitter-wasm` + `web-tree-sitter`），所以 `npm ci --ignore-scripts`
+跳过原生编译即可——不需要 python3/make/g++，也就没有 gcc/g++ 那 40MB 大包的下载风险。
+
+镜像体积：默认（含 qmd）**3.2GB**；`--build-arg INSTALL_QMD=0` 的瘦身版 **977MB**
+（`max_find_docs` 会因后端缺失被 probe 门控自动隐藏）。
+
+可选构建参数（默认值即下面这样，按需开）：
+
+| 参数 | 默认 | 说明 |
+|------|------|------|
+| `INSTALL_QMD` | `1` | 镜像内装 `@tobilu/qmd`（`max_find_docs` 后端） |
+| `INSTALL_CCC` | `0` | 装 `cocoindex-code`（`max_search_semantic` 后端，约 +2GB） |
+| `INSTALL_GITNEXUS` | `0` | 装 `gitnexus`（`max_trace_arch` 后端） |
+
+未安装的后端工具按 probe 门控自动隐藏（零 schema 占用），`max_find_code` 等六件套始终可用。
+
+### 用法一：MCP stdio（推荐，接 Claude Code）
+
+```powershell
+# 手动试跑（-i 必须：MCP 走 stdin/stdout）
+docker run -i --rm -v "D:\你的仓库:/workspace" graft-max:latest mcp
+
+# 注册到 Claude Code（user 作用域，全项目可用）
+claude mcp add graft-max-docker --scope user -- docker run -i --rm `
+  -v "D:\你的仓库:/workspace" graft-max:latest mcp
+claude mcp list   # 看到 graft-max-docker ✔ Connected
+```
+
+注意：`-v` 的宿主路径要写**仓库绝对路径**；容器内建图产物（`graft/`、`.trail/`）写回挂载目录，
+宿主上照样能看到、`git status` 里也与本地建图一致。
+
+### 用法二：Dashboard 常驻
+
+```powershell
+# 一键起（REPO_DIR 默认 duck2api-hub，你自己的仓库用环境变量覆盖）
+$env:REPO_DIR="D:\你的仓库"; docker compose -f docker-compose.max.yml up -d
+# 面板：http://127.0.0.1:24688  （日志 / 会话 / 存储与 DB 占用全在里面）
+docker compose -f docker-compose.max.yml logs -f max
+docker compose -f docker-compose.max.yml down
+```
+
+常驻模式的两处差异（compose 里已配好）：
+- `GRAFT_MAX_LEASH=0`：容器没有 MCP 宿主的 stdin 流量，stdin-leash 10 分钟自退必须关掉，否则容器一启动就因 stdin EOF 退出。
+- `GRAFT_MAX_UI_HOST=0.0.0.0`：容器内若仍绑 `127.0.0.1`，`-p 24688:24688` 打不进去
+  （Docker DNAT 目标是容器 eth0，不是 loopback）——镜像里已默认设好。
+- qmd 索引放命名卷 `qmd-index`，容器重建不丢。
+
+### 验证
+
+```powershell
+node e2e/e2e-docker.mjs      # D1 版本 / D2 MCP 握手 / D3 真实调用 / D4 面板+存储 / D5 非 root / D6 常驻存活
+```
 
 ---
 
@@ -211,6 +282,10 @@ grep、重构先 trace_calls 等）。幂等三态：created/updated/unchanged�
 | `GRAFT_MAX_UI` | 关 | `1` 开面板（端口 24688）；设为端口号自定义 |
 | `GRAFT_MAX_MCP` | 关 | `1` 时 init 注册 `graft-max` id + 自动建图 + 全局提示词生效 |
 | `GRAFT_MAX_INVOKED_AS` | — | 进程树 Max 身份标记（自动设置，勿手改） |
+| `GRAFT_MAX_LEASH` | 开 | `0` 关闭 stdin-leash（Docker 常驻容器必开此值，否则 10 分钟自退） |
+| `GRAFT_MAX_UI_HOST` | `127.0.0.1` | 面板绑定地址。容器里必须 `0.0.0.0` 才能被 `-p` 端口映射打到（Dockerfile 已设）；宿主用法保持默认即可 |
+| `GRAFT_MAX_AUTO_INDEX` | 开 | `0` 关闭「编辑后自动增量索引」（post-edit 触发后台建图） |
+| `GRAFT_MAX_SYNC_THROTTLE_MS` | 60000 | 自动增量索引的最小间隔（毫秒） |
 | `GRAFT_MCP_NPX` | 关 | 上游兼容：强制 npx 形式注册（原版行为） |
 
 ---

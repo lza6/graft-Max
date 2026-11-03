@@ -349,6 +349,13 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
     }
   });
   process.stdin.on('end', async () => {
+    // [Docker] compose 常驻模式（GRAFT_MAX_LEASH=0）stdin 一出生就是 end：
+    // 这是容器形态的正常状态而非宿主退出，保持常驻只退出 MCP 读循环。
+    if (process.env.GRAFT_MAX_LEASH === '0') {
+      dlog('=== graft-Max dashboard 常驻模式（stdin 已关闭，容器继续运行）===');
+      (rl as unknown as { close: () => void }).close?.();
+      return;
+    }
     dlog(`=== graft-Max MCP server exit === pid=${process.pid}`);
     // [graft-Max T2/T3] tear down federated children (gitnexus session,
     // embedded qmd store) with the same lifecycle as the server itself.
@@ -368,16 +375,21 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
   rl.on('line', () => {
     lastStdin = Date.now();
   });
-  const leash = setInterval(() => {
-    if (Date.now() - lastStdin > 10 * 60_000) {
-      dlog(`=== graft-Max MCP server exit (stdin leash: silent 10min) === pid=${process.pid}`);
-      // Await the teardown (qmd sqlite close), same as the stdin-end path.
-      void (async () => {
-        try { await shutdownFederatedSessions(); } catch {/* exit must proceed */}
-        endSession();
-        process.exit(0);
-      })();
-    }
-  }, 60_000);
-  leash.unref();
+  // [Docker] 常驻 dashboard 容器（compose 起的，无 MCP 宿主）没有 stdin 流量，
+  // leash 会 10 分钟自杀——GRAFT_MAX_LEASH=0 关闭（compose.max.yml 默认关）。
+  // 交互式 MCP 会话保持默认开。
+  if (process.env.GRAFT_MAX_LEASH !== '0') {
+    const leash = setInterval(() => {
+      if (Date.now() - lastStdin > 10 * 60_000) {
+        dlog(`=== graft-Max MCP server exit (stdin leash: silent 10min) === pid=${process.pid}`);
+        // Await the teardown (qmd sqlite close), same as the stdin-end path.
+        void (async () => {
+          try { await shutdownFederatedSessions(); } catch {/* exit must proceed */}
+          endSession();
+          process.exit(0);
+        })();
+      }
+    }, 60_000);
+    leash.unref();
+  }
 }
