@@ -85,3 +85,18 @@ $env:E2E_ROOT="C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code"; node 
 
 UI 截图：`e2e/docker-dashboard.png`（Playwright 真实浏览器：主题切换持久化、复制按钮反馈"已复制"、
 刷新按钮触发请求、存储表 10 行含 qmd DB/.gitnexus、零 JS 错误）
+
+## max.9 面板重做 + 容器权限修复（真实浏览器验收）
+
+| 验收项 | 结果 | 证据 |
+|--------|------|------|
+| 自动刷新真的在跑 | ✅ | 7s 内 /stats +3 /tail +3（2s 间隔） |
+| 暂停 = 全停 | ✅ | 暂停后 5s 内额外请求 +0 |
+| 主题持久化 | ✅ | 切换后重载仍为所选主题 |
+| 日志级别筛选 | ✅ | "只看错误" 1 行 / "全部" 16 行 |
+| 复制路径 | ✅ | 按钮反馈"已复制" |
+| 零 JS 错误 | ✅ | pageerror/console.error 均为空 |
+| 移动端 430px | ✅ | KPI 卡片宽 196px，两列堆叠 |
+| 容器内数据真实落盘 | ✅ | 命名卷修复后 9/10 产物存在、活跃会话 1（修复前全 0） |
+
+截图：`e2e/dashboard-light.png` / `dashboard-dark.png` / `dashboard-mobile.png`

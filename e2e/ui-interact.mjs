@@ -25,7 +25,8 @@ setTimeout(async () => {
 
   // 1. 主题切换
   const t0 = await page.evaluate(() => document.documentElement.dataset.theme);
-  await page.click('button[title="切换亮暗"]');
+  // 新设计：主题按钮带 #themeLabel 文案（亮色/暗色）
+  await page.click('button:has(#themeLabel)');
   const t1 = await page.evaluate(() => document.documentElement.dataset.theme);
   check('1a 主题按钮点击真实切换', t0 !== t1, `${t0} → ${t1}`);
   const stored = await page.evaluate(() => localStorage.getItem('gm-theme'));
@@ -41,7 +42,9 @@ setTimeout(async () => {
     return document.getElementById('ms').value === '500';
   });
   check('2a 输入框接受 500ms', timerWorked, '值已改');
-  await page.click('button[title="应用新的轮询间隔"]');
+  // 新设计：去掉了单独的「应用间隔」按钮，输入框 change（回车/失焦）即生效
+  await page.press('#ms', 'Enter');
+  await page.click('h2:has-text("实时日志")');
   let reqCount = 0;
   page.on('request', r => { if (r.url().includes('/tail')) reqCount++; });
   await page.waitForTimeout(5000);

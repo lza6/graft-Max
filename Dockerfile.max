@@ -82,6 +82,11 @@ ENV GRAFT_MAX_LEASH=1
 # 容器内必须绑 0.0.0.0，否则 -p 端口映射到不了（docker DNAT 打容器 eth0）
 ENV GRAFT_MAX_UI_HOST=0.0.0.0
 
+# 运行时要写的两个目录必须在镜像里就存在且属于 node：
+# Docker 用命名卷覆盖一个**不存在**的路径时会建成 root:root，以 node 运行就写不进去
+# ——实测踩到：max-home 卷 root 属主 → 日志/会话文件全写不进，面板所有数据"未创建"。
+RUN mkdir -p /home/node/.graft-max /home/node/.trail /home/node/.cache/qmd     && chown -R node:node /home/node/.graft-max /home/node/.trail /home/node/.cache
+
 USER node
 WORKDIR /workspace
 VOLUME ["/workspace"]

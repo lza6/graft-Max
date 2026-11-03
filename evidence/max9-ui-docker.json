@@ -1,0 +1,59 @@
+{
+  "task_id": "max9-ui-docker",
+  "title": "面板视觉重做 + 容器权限修复 + 面板端点压测",
+  "status": "done",
+  "timestamp": "2026-11-04",
+  "commands_executed": [
+    { "cmd": "npx tsc --noEmit", "exit_code": 0, "raw_output_tail": "" },
+    { "cmd": "npm run build", "exit_code": 0, "raw_output_tail": "dist/cli.js --version => 0.28.0-max.9" },
+    { "cmd": "npm test", "exit_code": 0, "raw_output_tail": "tests 4156 / pass 4053 / fail 0" },
+    { "cmd": "docker build -f Dockerfile.max -t graft-max:latest .", "exit_code": 0, "raw_output_tail": "naming to docker.io/library/graft-max:latest done (~60s)" },
+    { "cmd": "node e2e/e2e-docker.mjs", "exit_code": 0, "raw_output_tail": "Docker E2E: 9/9 passed" },
+    { "cmd": "node e2e/ui-interact.mjs", "exit_code": 0, "raw_output_tail": "UI 深度交互验收: 7/7" },
+    { "cmd": "node e2e/e2e-fed-perf.mjs", "exit_code": 0, "raw_output_tail": "8/8 PASS" },
+    { "cmd": "node /tmp/load.mjs (面板端点压测)", "exit_code": 0, "raw_output_tail": "/stats p50 56.7ms p95 107.7ms; /storage p50 4.3ms (修复前 3201.9ms); /tail p50 6.5ms; / p50 4.2ms; err 0" },
+    { "cmd": "docker compose up -d --force-recreate", "exit_code": 0, "raw_output_tail": "graft-max-dashboard Up (healthy) 0.0.0.0:24688->24688/tcp" }
+  ],
+  "files_changed": [
+    "src/mcp/dashboard.ts (前端整体重写 + panelVersion + bindHost + 端口偏移 + dirSize 异步化 + storage/toolStats 缓存)",
+    "src/mcp/devlog.ts (用户名回退 os.userInfo())",
+    "Dockerfile.max (预建并 chown /home/node/.graft-max、.trail、.cache/qmd)",
+    "e2e/ui-interact.mjs (选择器随新 UI 更新，断言未削弱)",
+    "CHANGELOG.md / README.md / docs-selfdev/* / e2e/E2E-REPORT.md",
+    "package.json (0.28.0-max.8 → max.9)"
+  ],
+  "tests": [
+    { "name": "npm test (4156)", "type": "unit+integration", "status": "pass", "evidence": "4053 pass / 0 fail" },
+    { "name": "e2e-docker (9)", "type": "E2E 真实容器", "status": "pass", "evidence": "9/9" },
+    { "name": "ui-interact (7)", "type": "E2E 真实浏览器", "status": "pass", "evidence": "7/7，含轮询间隔 10 次/5s 生效" },
+    { "name": "e2e-fed-perf (8)", "type": "E2E 联邦工具", "status": "pass", "evidence": "8/8" }
+  ],
+  "browser_validation": {
+    "tool": "playwright chromium 1248",
+    "assertions": [
+      "自动刷新真实在跑：7s 内 /stats +3 /tail +3（2s 间隔）",
+      "暂停 = 全停：暂停后 5s 额外请求 +0",
+      "主题切换后重载仍保持（localStorage）",
+      "日志级别筛选：只看错误 1 行 / 全部 16 行",
+      "复制路径按钮反馈「已复制」",
+      "移动端 430px：KPI 卡片 196px 两列堆叠",
+      "全程 pageerror / console.error 为空"
+    ],
+    "screenshots": ["e2e/dashboard-light.png", "e2e/dashboard-dark.png", "e2e/dashboard-mobile.png", "e2e/docker-dashboard.png"]
+  },
+  "bugs_found_and_fixed": [
+    "命名卷 root 属主 → 容器内日志/会话写不进，面板全显示未创建/活跃会话 0（P0）",
+    "前端重写漏声明 var timer → ReferenceError → 自动刷新从未启动（P1）",
+    "暂停按钮只停 /tail，KPI/会话仍在轮询（P2 语义不一致）",
+    "dirSize 同步递归 → /storage p50 3201ms 且阻塞事件循环（P1 性能）",
+    "toolStats 每次解析 800 行日志 → 加 2s 缓存",
+    "panelVersion 走 cli-meta 的 dist/cli.js 假设 → 显示 dev（P2）"
+  ],
+  "seams_touched": ["MCP server ↔ dashboard HTTP", "dashboard ↔ 文件系统（产物统计）", "Docker 命名卷 ↔ 容器用户权限"],
+  "mock_scenarios_covered": "无 mock：全部真实容器 + 真实浏览器 + 本机 HTTP",
+  "limitations": [
+    "压测为本机单机（Windows Docker Desktop），非生产级并发基准",
+    "INSTALL_CCC / INSTALL_GITNEXUS 未在镜像内实测（默认关闭，需 +2GB）",
+    "npm 发布（T7）未做：无 npm 账号，用户明确跳过"
+  ]
+}
