@@ -60,6 +60,21 @@ export function upsertGlobalPrompt(home: string = homedir()): 'created' | 'updat
   return 'created';
 }
 
+/** 轻量补块检查：块被用户手删时补回（不含 existsSync 的快路径，供热路径调用）。
+ * server boot 已注入；这里兜"会话中途用户手删"的情况。节流：60 秒内最多查一次。 */
+let lastCheck = 0;
+export function ensurePromptBlock(): void {
+  const now = Date.now();
+  if (now - lastCheck < 60_000) return;
+  lastCheck = now;
+  try {
+    const path = globalClaudeMdPath();
+    if (!existsSync(path)) return;
+    const raw = readFileSync(path, 'utf8');
+    if (!raw.includes(MAX_PROMPT_START)) upsertGlobalPrompt();
+  } catch {/* best effort */}
+}
+
 /** 摘除注入块（切回原版时用）。返回是否动了文件。 */
 export function removeGlobalPrompt(home: string = homedir()): boolean {
   const path = globalClaudeMdPath(home);

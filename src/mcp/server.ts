@@ -21,7 +21,7 @@ import { availableFederatedTools, callFederatedTool, FEDERATED_TOOL_NAMES } from
 import { dlog, dlogBlock, clip, logPath, registerSession, endSession, bumpRequests } from './devlog.js';
 import { startDashboard } from './dashboard.js';
 // [graft-Max] 全局提示词注入（GRAFT_MAX_MCP=1 时生效，切回原版即摘除）
-import { upsertGlobalPrompt, removeGlobalPrompt } from '../hosts/max-prompt.js';
+import { upsertGlobalPrompt, removeGlobalPrompt, ensurePromptBlock } from '../hosts/max-prompt.js';
 
 /**
  * MCP tool name → the command enum the telemetry contract knows. A tool absent

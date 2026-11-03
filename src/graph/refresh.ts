@@ -152,11 +152,19 @@ async function buildMissingMap(dir: string, outDir: string, opts: RefreshOptions
   }
   const lockCache = join(outDir, CACHE_DIR);
   const started = Date.now();
+  // [graft-Max] 建图状态落盘，供 dashboard 显示"建图进行中"（否则用户看不见）
+  try {
+    const { writeFileSync: wfs, mkdirSync: mks } = await import('node:fs');
+    mks(join(outDir, '.graph'), { recursive: true });
+    wfs(join(outDir, '.graph', 'building.json'), JSON.stringify({ startedAt: new Date().toISOString(), pid: process.pid }), 'utf8');
+  } catch {/* best effort */}
   // The lock free and still no map: nobody is building it, so this query starts it.
   // Taken here, released by the child.
   if (!lockHeldIn(lockCache) && acquireLockIn(lockCache) && !startFirstBuild(dir)) releaseLockIn(lockCache);
   const deadline = started + firstBuildWait(opts);
   while (lockHeldIn(lockCache) && Date.now() < deadline) await sleep(FIRST_BUILD_POLL_MS);
+  // [graft-Max] 建图完成，清除状态文件
+  try { const { unlinkSync: ufs } = await import('node:fs'); ufs(join(outDir, '.graph', 'building.json')); } catch {}
   if (existsSync(wiringPath(outDir))) {
     invalidateGraphCaches(outDir);
     return `built this repo's code map for the first time (${Math.round((Date.now() - started) / 1000)}s)`;

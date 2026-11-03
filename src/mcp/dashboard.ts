@@ -16,6 +16,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile, stat, open } from 'node:fs/promises';
 import { dlog, logPath, liveSessions, SESSIONS_FILE, type SessionRow } from './devlog.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const DEFAULT_PORT = 24688;
 
@@ -117,6 +119,7 @@ tr:last-child td{border-bottom:none}
   <div class="card"><div class="k">活跃会话</div><div class="v" id="cSessions">–</div></div>
   <div class="card"><div class="k">累计工具调用</div><div class="v" id="cRequests">–</div></div>
   <div class="card"><div class="k">日志大小</div><div class="v" id="cLog">–</div></div>
+  <div class="card"><div class="k">建图状态</div><div class="v" id="cBuilding" style="font-size:15px">–</div></div>
   <div class="card"><div class="k">面板地址</div><div class="v" style="font-size:13px">127.0.0.1:24688<br><small>实时日志 / 会话 / 统计</small></div></div>
 </div>
 <h2><span class="dot"></span>活跃会话 · 谁正在使用</h2>
@@ -141,6 +144,8 @@ async function loadSessions(){
 async function loadStats(){
   try{const s=await (await fetch('/stats')).json();
   document.getElementById('cRequests').textContent=s.requests;
+  const bEl=document.getElementById('cBuilding');
+  if(bEl){bEl.textContent=(s.building&&s.building.length)?('建图中('+s.building.length+')'):'空闲';}
   document.getElementById('cLog').innerHTML=(s.logBytes/1024).toFixed(1)+' <small>KB（5MB 自动滚动）</small>';
   }catch(e){}
 }
@@ -198,12 +203,17 @@ export function startDashboard(explicitPort?: number): void {
           rotated = (await stat(`${logPath()}.1`)).size > 0 ? 'yes' : '';
         } catch {/* none */}
         const sessions: SessionRow[] = liveSessions();
+        // [graft-Max] 各会话仓库的建图状态（building.json 存在=建图进行中）
+        const building = sessions
+          .filter((s2) => existsSync(join(s2.cwd, 'graft', '.graph', 'building.json')))
+          .map((s2) => s2.cwd);
         json(res, 200, {
           logPath: logPath(),
           logBytes: bytes,
           rotated,
           sessionsFile: SESSIONS_FILE,
-          requests: sessions.reduce((a, s) => a + s.requests, 0),
+          requests: sessions.reduce((a, s2) => a + s2.requests, 0),
+          building,
         });
       } else {
         json(res, 404, { error: 'not found' });
