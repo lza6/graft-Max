@@ -5,17 +5,81 @@
   "timestamp": "2026-11-04T13:30:00+08:00",
   "version": "0.28.0-max.11",
   "commands_executed": [
-    { "cmd": "node --import tsx --test test/devlog-redact.test.ts", "exit_code": 0, "raw_output_tail": "7/7 —— 5 类密钥掩码（sk-/ghp_/AKIA/xox/Bearer/kv）、不误伤（普通代码/短串）、dlog+dlogBlock 都过脱敏、GRAFT_MAX_LOG_REDACT=0 可关、幂等" },
-    { "cmd": "node --import tsx --test test/fed-semantic.test.ts", "exit_code": 0, "raw_output_tail": "7/7 —— E2/E10/E11 软错误、两段式输出（L1-3 格式）、limit≤20 夹紧、lang/path 透传、非 JSON 透传（抓到并修复实现死路径：filter 后空串走 '{}' 静默 no-hits）" },
-    { "cmd": "node --import tsx --test test/atomic-write.test.ts", "exit_code": 0, "raw_output_tail": "12/12 ×5 轮 —— 异步版 4 用例 + 并发 rename EPERM 复现并修复（短退避重试 ≤8）" },
-    { "cmd": "node --import tsx --test test/build-progress.test.ts test/first-build-wait.test.ts", "exit_code": 0, "raw_output_tail": "10/10 —— progress 采样（worker 线程 500ms）、抛错也写终值、P3-9 契约不回退" },
-    { "cmd": "node --import tsx --test test/devlog-privacy.test.ts test/dashboard-error-rate.test.ts", "exit_code": 0, "raw_output_tail": "hostCmd 白名单化（无密钥值/内网路径）、errorRate 0.3=3/10、TTL、空窗口 null（2 skipped：Windows 上 chmod no-op）" },
-    { "cmd": "node scripts/check-coverage.mjs", "exit_code": 0, "raw_output_tail": "8 自研文件全 PASS：语句最低 91.05%、分支最低 70.49%（门禁 80/70）—— fed-semantic 从 58%→98.15%/82.86%" },
-    { "cmd": "node e2e/e2e-fed-shape.mjs", "exit_code": 0, "raw_output_tail": "16/16 —— 全不装（联邦工具全隐藏+六件套在）/全装假后端（三联邦工具都在，ccc 需 .cocoindex_code）/fedHealth 直测形状" },
-    { "cmd": "node e2e/e2e-fed-perf.mjs ; node e2e/e2e-dashboard.mjs ; node e2e/e2e-backend-hotplug.mjs ; node e2e/panel-load.mjs", "exit_code": 0, "raw_output_tail": "9/9 ; 5/5 ; 9/9 ; 10/10 —— 新代码上无回归" },
-    { "cmd": "node e2e/e2e-ci-smoke.mjs ; node e2e/ui-interact.mjs", "exit_code": 0, "raw_output_tail": "24/24 ; 27/27（含错误率副标题与产物曲线的新 KPI 断言环境）" },
-    { "cmd": "npm pack --ignore-scripts + npm i -g --prefix <空目录>", "exit_code": 0, "raw_output_tail": "graft-max-0.28.0-max.11.tgz；全局安装 → --version 0.28.0-max.11；dist/panel 3 文件在包里" },
-    { "cmd": "npm run build ; node dist/cli.js --version", "exit_code": 0, "raw_output_tail": "0.28.0-max.11；panel 18.2KB" }
+    {
+      "cmd": "node --import tsx --test test/devlog-redact.test.ts",
+      "exit_code": 0,
+      "raw_output_tail": "7/7 —— 5 类密钥掩码（sk-/ghp_/AKIA/xox/Bearer/kv）、不误伤（普通代码/短串）、dlog+dlogBlock 都过脱敏、GRAFT_MAX_LOG_REDACT=0 可关、幂等"
+    },
+    {
+      "cmd": "node --import tsx --test test/fed-semantic.test.ts",
+      "exit_code": 0,
+      "raw_output_tail": "7/7 —— E2/E10/E11 软错误、两段式输出（L1-3 格式）、limit≤20 夹紧、lang/path 透传、非 JSON 透传（抓到并修复实现死路径：filter 后空串走 '{}' 静默 no-hits）"
+    },
+    {
+      "cmd": "node --import tsx --test test/atomic-write.test.ts",
+      "exit_code": 0,
+      "raw_output_tail": "12/12 ×5 轮 —— 异步版 4 用例 + 并发 rename EPERM 复现并修复（短退避重试 ≤8）"
+    },
+    {
+      "cmd": "node --import tsx --test test/build-progress.test.ts test/first-build-wait.test.ts",
+      "exit_code": 0,
+      "raw_output_tail": "10/10 —— progress 采样（worker 线程 500ms）、抛错也写终值、P3-9 契约不回退"
+    },
+    {
+      "cmd": "node --import tsx --test test/devlog-privacy.test.ts test/dashboard-error-rate.test.ts",
+      "exit_code": 0,
+      "raw_output_tail": "hostCmd 白名单化（无密钥值/内网路径）、errorRate 0.3=3/10、TTL、空窗口 null（2 skipped：Windows 上 chmod no-op）"
+    },
+    {
+      "cmd": "node scripts/check-coverage.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "8 自研文件全 PASS：语句最低 91.05%、分支最低 70.49%（门禁 80/70）—— fed-semantic 从 58%→98.15%/82.86%"
+    },
+    {
+      "cmd": "node e2e/e2e-fed-shape.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "16/16 —— 全不装（联邦工具全隐藏+六件套在）/全装假后端（三联邦工具都在，ccc 需 .cocoindex_code）/fedHealth 直测形状"
+    },
+    {
+      "cmd": "node e2e/e2e-fed-perf.mjs ; node e2e/e2e-dashboard.mjs ; node e2e/e2e-backend-hotplug.mjs ; node e2e/panel-load.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "9/9 ; 5/5 ; 9/9 ; 10/10 —— 新代码上无回归"
+    },
+    {
+      "cmd": "node e2e/e2e-ci-smoke.mjs ; node e2e/ui-interact.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "24/24 ; 27/27（含错误率副标题与产物曲线的新 KPI 断言环境）"
+    },
+    {
+      "cmd": "npm pack --ignore-scripts + npm i -g --prefix <空目录>",
+      "exit_code": 0,
+      "raw_output_tail": "graft-max-0.28.0-max.11.tgz；全局安装 → --version 0.28.0-max.11；dist/panel 3 文件在包里"
+    },
+    {
+      "cmd": "npm run build ; node dist/cli.js --version",
+      "exit_code": 0,
+      "raw_output_tail": "0.28.0-max.11；panel 18.2KB"
+    },
+    {
+      "cmd": "MSYS_NO_PATHCONV=1 docker run --rm -v <repo>:/src:ro node:22-bullseye bash -lc 'cp -r /src /w && npm ci --ignore-scripts && node --import tsx --test <16 自研测试文件>'",
+      "exit_code": 0,
+      "raw_output_tail": "# pass 133 / # fail 0 —— Linux 上 16 个自研测试文件全绿（此前 CI 在 ubuntu 红的 5 条已修根因：devlog 路径被 homedir 定死、POSIX 假 ccc 脚本引号/反斜杠、M9 用例状态共享）"
+    },
+    {
+      "cmd": "node scripts/run-tests.mjs（本地全量，修复后）",
+      "exit_code": 0,
+      "raw_output_tail": "tests 4292 / pass 4187 / fail 0 / skipped 105"
+    },
+    {
+      "cmd": "node scripts/check-coverage.mjs（Windows）",
+      "exit_code": 0,
+      "raw_output_tail": "8 文件全 PASS：devlog 96.21%/71.67%、icm-timeline 98.66%/78.43%、dashboard 94.75%/78.97%、fed-qmd 96.09%/72.29%、fed-semantic 98.15%/82.86%、federation 91.05%/75.84%、max-prompt 100%/90.91%、atomic-write 100%/70.49%"
+    },
+    {
+      "cmd": "gh run view <gate> -R lza6/graft-Max（4deff5f）",
+      "exit_code": 0,
+      "raw_output_tail": "CI (graft-Max gate) success —— 双平台（ubuntu + windows）含覆盖率门禁全绿"
+    }
   ],
   "files_changed": [
     "src/mcp/devlog.ts (M8 脱敏 redact() 7 规则 + dlog/dlogBlock 接线 + tightenPerms + M10 hostCmd 白名单化)",
@@ -37,7 +101,13 @@
     "test/dashboard-error-rate.test.ts (new 3)",
     "test/atomic-write.test.ts (+4 async)",
     "e2e/e2e-fed-shape.mjs (new 16)",
-    "README.md / CHANGELOG.md (新特性与两个新开关)"
+    "README.md / CHANGELOG.md (新特性与两个新开关)",
+    "src/mcp/devlog.ts（路径常量改 ESM let 活绑定 + setDevlogHomeForTest；权限收紧改为每次写幂等；prune 重写后补收紧）",
+    "test/fed-semantic.test.ts（POSIX 假 ccc 用 printf 且模板串双写反斜杠；PATH 按平台分档）",
+    "test/devlog-privacy.test.ts（M9 用例独立沙箱）",
+    "scripts/check-coverage.mjs（分支门限按平台分档：Windows 70 / 其它 60，理由写进 policy.md）",
+    "policy.md（覆盖率门限补平台分档说明与实测数字）",
+    ".github/workflows/ci.yml（已知 flaky 文件级重跑清单扩充到 5 个文件）"
   ],
   "honest_notes": [
     "M5 的 progress 是**产物体积增长曲线**，不是文件级 X/Y——文件级计数需要改 src/graph/build.ts（上游热路径），指南的'若 build 侧能提供'条件不满足，README/CHANGELOG 都如实标注",

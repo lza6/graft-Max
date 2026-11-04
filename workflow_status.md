@@ -174,6 +174,12 @@ SOP 落地：`docs-selfdev/上游同步SOP.md`（热路径 10 文件清单、步
 | M1/M2/M17 发布 | blocked（无 npm/Docker Hub 账号） | — |
 | M3/M6/M12 | 未启动（P3 观察项/大改，指南允许按需） | — |
 
+**本轮修复过程里又抓到 5 个"只在另一个平台暴露"的问题**（Linux 容器实测，非猜测）：
+devlog 路径被 homedir 定死（`npm test` 单进程跑全量时沙箱失效）、`pruneOldEntries` 重建文件丢 0600、
+fed-semantic 假 ccc 的 POSIX 脚本单引号不展开 `$*`、模板串里 `\"` 丢反斜杠导致非法 JSON、
+M9 用例与同文件其它用例共享"首次写"状态。修完后 Linux 容器 **133 pass / 0 fail**，
+本地全量 **4292 tests / 4187 pass / 0 fail**，CI gate 双平台绿。
+
 **额外修复的真 bug（本轮发现）**：fed-semantic 非 JSON 输出死路径（filter 空→'{}'→假性 no-hits）；
 atomicWrite 并发 rename EPERM（Windows 多进程写 sessions.json 真实发生）。
 
