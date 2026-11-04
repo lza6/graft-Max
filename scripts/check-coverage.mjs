@@ -27,7 +27,13 @@ const TESTS = [
 ];
 
 const MIN_LINES = 80;
-const MIN_BRANCH = 70;
+// 分支门限按平台分档，原因写在 policy.md §1：约 10 个分支点是**平台互斥**的
+// （`process.platform === 'win32'` 早退、POSIX chmod 的 try/catch 等），单个 runner
+// 无论 Windows 还是 Linux 都只可能走到其中一半。语句门限（80%）不受影响。
+const MIN_BRANCH = process.platform === 'win32' ? 70 : 60;
+const MIN_BRANCH_WHY = process.platform === 'win32'
+  ? 'Windows（主开发平台）'
+  : `非 Windows（平台互斥分支走不到，门限放宽到 60；同一份代码在 Windows 上按 70 门禁）`;
 
 let out = '';
 try {

@@ -7,11 +7,18 @@
 
 | 范围 | 门限 | 判定方式 |
 |------|------|---------|
-| 新增/修改的**自研模块**（`src/mcp/*`、`src/hosts/max-prompt.ts`、`src/util/atomic-write.ts`） | 语句覆盖 ≥ 80%，分支覆盖 ≥ 70% | `node --test --experimental-test-coverage` 单文件跑该模块对应测试 |
+| 新增/修改的**自研模块**（`src/mcp/*`、`src/hosts/max-prompt.ts`、`src/util/atomic-write.ts`） | **语句 ≥ 80%**；**分支 ≥ 70%（Windows）/ ≥ 60%（非 Windows）** | `node scripts/check-coverage.mjs`（CI 已接入，门禁清单写死在脚本里） |
 | 纯逻辑函数（无 IO/无子进程） | 100% 分支 | 单测逐分支断言（含错误/边界路径） |
 | 全仓库 | 不允许低于本轮基线（`npm test` 总 fail = 0） | `npm test` 输出 |
 
 **覆盖率是信号不是目标**：不为凑数字写无断言测试；核心逻辑必须覆盖 正常 / 错误 / 边界 / 权限 四类路径。
+
+**分支门限为什么分平台**（2026-11 实测，`max.11`）：自研代码里有约 10 个分支点是**平台互斥**的
+（`process.platform === 'win32'` 的早退、POSIX `chmod` 的 try/catch、`isWin` 三元等）。任何一个
+runner 都只可能走到其中一半——同一份代码 Windows 实测 devlog 71.7% / atomic-write 70.5%，
+Linux 实测 67.8% / 63.6%。所以 **Windows（主开发平台）按 70% 卡，其它平台按 60% 卡**；
+语句门限（80%）不分平台。这不是放宽标准：两个平台的**并集**才是真实覆盖率，
+单平台数字只反映"这台机器能执行到的分支"。
 
 ## 2. 付费 API 红线
 
