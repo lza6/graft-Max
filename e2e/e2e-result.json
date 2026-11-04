@@ -1,60 +1,60 @@
 {
-  "when": "2026-11-04T00:48:40.078Z",
+  "when": "2026-11-04T01:24:16.413Z",
   "server": "D:\\自研工具\\graft-Max\\dist\\cli.js",
   "root": "D:/自研工具/graft-Max",
   "results": [
     {
       "name": "initialize",
       "ok": true,
-      "ms": 926,
+      "ms": 708,
       "detail": "{\"name\":\"graft\",\"version\":\"0.28.0-max.10\"}"
     },
     {
       "name": "tools/list has graft six",
       "ok": true,
-      "ms": 1242,
+      "ms": 993,
       "detail": "max_find_code,max_file_api,max_check_freshness,max_trace_calls,max_find_all,max_repo_map,max_find_docs,max_trace_arch"
     },
     {
       "name": "tools/list has max_find_docs (qmd probed OK)",
       "ok": true,
-      "ms": 1242,
+      "ms": 993,
       "detail": "present"
     },
     {
       "name": "tools/list has max_trace_arch (gitnexus probed OK)",
       "ok": true,
-      "ms": 1242,
+      "ms": 993,
       "detail": "present"
     },
     {
       "name": "max_find_docs real qmd search",
       "ok": true,
-      "ms": 250,
+      "ms": 143,
       "detail": "hits: 1, first: qmd://agentcode/README.md:344 #101e06\nTitle: Agent-Code\nScore:  81%\n\n@@ -343,4 @"
     },
     {
       "name": "max_trace_arch real gitnexus query",
       "ok": true,
-      "ms": 1865,
+      "ms": 941,
       "detail": "isError=false, text: {\n  \"processes\": [],\n  \"process_symbols\": [],\n  \"definitions\": [\n    {\n      \"id\": \"File:README.md\",\n      \"name\": \"READ"
     },
     {
       "name": "max_find_docs empty query → soft isError",
       "ok": true,
-      "ms": 3360,
+      "ms": 2078,
       "detail": "max_find_docs requires a query"
     },
     {
       "name": "graft_find_code still works",
       "ok": true,
-      "ms": 380,
-      "detail": "[graft] tokens saved ≈ 13,968 (98%) — this pack ≈ 314 tok vs reading the 3 source file(s) whole ≈ 14"
+      "ms": 1544,
+      "detail": "[graft] refreshed the graph (7 files changed) before answering\n[graft] tokens saved ≈ 14,070 (96%) —"
     },
     {
       "name": "legacy alias graft_ask still works",
       "ok": true,
-      "ms": 602,
+      "ms": 1751,
       "detail": "isError=false"
     }
   ]

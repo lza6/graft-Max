@@ -10,16 +10,23 @@ import { spawn } from 'node:child_process';
 import { get } from 'node:http';
 import { fileURLToPath } from 'node:url';
 
-const getJson = (p) => new Promise((res, rej) => get(`http://127.0.0.1:24698${p}`, r => { let b=''; r.on('data',d=>b+=d); r.on('end',()=>res(JSON.parse(b))); }).on('error', rej));
-const getText = (p) => new Promise((res, rej) => get(`http://127.0.0.1:24698${p}`, r => { let b=''; r.on('data',d=>b+=d); r.on('end',()=>res(b)); }).on('error', rej));
+// [N10 收尾] 端口从 stderr 读真实值：本机若已有实例占着预期端口，server 会自动 +1~+9，
+// 写死就会打到别人的面板上（e2e-dashboard 就被容器的 401 打回过）。
+const WANT_PORT = 24698 + (process.pid % 20);
+let uiPort = WANT_PORT;
+const getJson = (p) => new Promise((res, rej) => get(`http://127.0.0.1:${uiPort}${p}`, r => { let b=''; r.on('data',d=>b+=d); r.on('end',()=>res(JSON.parse(b))); }).on('error', rej));
+const getText = (p) => new Promise((res, rej) => get(`http://127.0.0.1:${uiPort}${p}`, r => { let b=''; r.on('data',d=>b+=d); r.on('end',()=>res(b)); }).on('error', rej));
 
 const results = [];
 const check = (name, ok, detail='') => { results.push(ok); console.log(`${ok?'PASS':'FAIL'}  ${name}  ${String(detail).slice(0,140)}`); };
 
 const c = spawn(process.execPath, [fileURLToPath(new URL('../dist/cli.js', import.meta.url)), 'mcp', 'C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code'], {
-  env: { ...process.env, GRAFT_MAX_LOG: '1', GRAFT_MAX_UI: '24698' }, windowsHide: true,
+  env: { ...process.env, GRAFT_MAX_LOG: '1', GRAFT_MAX_UI: String(WANT_PORT) }, windowsHide: true,
 });
-c.stderr.on('data', () => {});
+c.stderr.on('data', (buf) => {
+  const m = /dashboard: http:\/\/(?:127\.0\.0\.1|0\.0\.0\.0|localhost):(\d+)/.exec(String(buf));
+  if (m) uiPort = Number(m[1]);
+});
 const send = (o) => c.stdin.write(JSON.stringify(o) + '\n');
 send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'claude-code-sim', version: '2.1.312' } } });
 send({ jsonrpc: '2.0', method: 'notifications/initialized' });
