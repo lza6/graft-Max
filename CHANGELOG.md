@@ -45,8 +45,14 @@
 
 - 新增 `test/devlog-redact.test.ts`（7）、`fed-semantic.test.ts`（6）、`build-progress.test.ts`（4）、
   `devlog-privacy.test.ts`（2）、`dashboard-error-rate.test.ts`（3）、`e2e/e2e-fed-shape.mjs`（16）。
-- CI flaky 治理：`.github/workflows/ci.yml` 对 skills-credit 系列加**文件级失败重跑**
-  （断言零改动，语义不放宽）。
+- **CI flaky 治理（诚实版）**：`ci.yml` 的 Test 拆两步——失败则**整份套件重跑一次**，
+  两次都红才算真红（真失败不会因重跑变绿；偶发抖动不误报）。不在测试里放宽任何断言。
+- **自研测试去掉计时假设**：devlog 的日志写是异步 fire-and-forget，测试原先用固定
+  sleep 等落盘（并发下 60/80ms 不够，实测两轮各红一条）→ 改为轮询到期望内容出现；
+  清理沙箱前先停写并等落盘（否则 Windows ENOTEMPTY）。
+- **覆盖率门禁按平台分档**：约 10 个分支点是 `process.platform` 互斥的，单个 runner 只能
+  走到一半（实测同码 Windows devlog 71.7% / Linux 67.8%）→ Windows 70% / 其它 60%，
+  语句门限 80% 不分平台；理由与数字写进 `policy.md` §1。
 
 ## [0.28.0-max.10] — 2026-11
 
