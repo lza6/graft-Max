@@ -25,7 +25,7 @@
 
 | | 原版 graft | graft-Max |
 |---|-----------|----------|
-| MCP 工具 | `graft_find_code` 等 6 个 | **`max_find_code` 等 8 个**（一眼识别 Max） |
+| MCP 工具 | `graft_find_code` 等 6 个 | **`max_find_code` 等 6 个 + 最多 3 个联邦工具**（装了什么后端就自动出现什么，没装的不占 schema 预算） |
 | 文档/笔记检索 | ❌ | ✅ `max_find_docs`（qmd BM25） |
 | 架构级依赖链 | ❌ | ✅ `max_trace_arch`（gitnexus） |
 | 自动建图 | 需手动 `graft init` + `build` | ✅ 首次查询**自动建图**（~2 秒） |
@@ -67,7 +67,7 @@ npm install -g @tobilu/qmd        # max_find_docs 后端
 npm install -g gitnexus           # max_trace_arch 后端
 ```
 
-**完成。** 新开一个 Claude Code 会话，graft-Max 自动生效：8 个 `max_*` 工具自动可用、
+**完成。** 新开一个 Claude Code 会话，graft-Max 自动生效：6 个 `max_*` 工具 + 已装后端对应的联邦工具自动可用、
 全局提示词自动注入、面板在 `http://127.0.0.1:24688`。
 
 ### 日常怎么用
@@ -118,14 +118,19 @@ graft-Max server（dist/cli.js mcp）
    └─ Dashboard（127.0.0.1:24688，只绑本机）
 ```
 
-### 八个工具的分工（互补不打架）
+### 九个工具的分工（互补不打架）
+
+> 前 6 个（符号/结构层）永远在；后 3 个是联邦工具，**后端没装就自动隐藏**——
+> 不装 qmd 就没有 `max_find_docs`，不装 gitnexus 就没有 `max_trace_arch`，
+> 不装 ccc 就没有 `max_search_semantic`（未邀请的仓库则连这 6 个也不给）。
 
 | 层 | 工具 | 回答的问题 |
 |----|------|-----------|
 | 符号层 | `max_find_code` / `max_find_all` / `max_file_api` | "这段代码在哪/怎么实现"（LSP 级精确） |
 | 结构层 | `max_trace_calls` / `max_repo_map` / `max_check_freshness` | "谁调用它/改它影响什么"（图谱边） |
 | 架构层 | `max_trace_arch` | "模块 A 依赖模块 B 吗"（gitnexus 图数据库） |
-| 文档层 | `max_find_docs` | "我们的笔记/规格怎么写的"（BM25 全文） |
+| 文档层 | `max_find_docs` | "我们的笔记/规格怎么写的"（qmd BM25 全文，毫秒级、零模型） |
+| 语义层 | `max_search_semantic` | "不记得关键词、只记得意思"（ccc 本地嵌入，~380ms） |
 
 ### 自动建图原理（为什么不用手动 init）
 
@@ -193,11 +198,27 @@ grep、重构先 trace_calls 等）。幂等三态：created/updated/unchanged�
 
 浏览器打开 `http://127.0.0.1:24688`（GRAFT_MAX_UI=1 的会话启动时自动开）：
 
-- **统计卡片**：活跃会话数 / 累计工具调用 / 日志大小 / 面板地址
-- **活跃会话表**：谁在用——pid、用户、宿主进程（哪个编辑器拉起的）、仓库路径、请求数（实时增长）、启动时间
-- **实时日志**：2 秒轮询，彩色分级（启动橙 / 联邦紫 / 错误红 / 时间戳灰），自动滚底
-- 亮暗双主题（🌓 切换），设计 tokens 对齐上游 viewer
-- 端口被占自动 +1~+9；只绑 127.0.0.1 永不暴露网络
+- **KPI 卡 5 张**：活跃会话 / 累计工具调用 / 日志大小 / 建图状态（建图中会显示仓库与已耗时） / 面板地址
+- **活跃会话表**：谁在用——pid、用户、宿主进程（哪个编辑器拉起的）、仓库路径、请求数（实时增长）、启动时间、**容器标识徽章**
+- **工具耗时卡**：每个工具的次数 / 平均 / **p50 / p95** / 错误数 + 分布条（性能收益的可视化证据）
+- **联邦后端卡**：qmd / gitnexus / ccc 的探针状态、距今多久、安装/修复命令（一键复制）、**「重试探针」按钮**——装完后端不用重启会话
+- **存储 / 产物卡**：每个产物文件/目录的绝对路径与占用，**按仓库分组**（一张面板看全部仓库），一键复制路径
+- **索引新鲜度卡**：图谱指纹 vs 工作区（改/增/删几个文件、上次同步时间）
+- **实时日志**：2 秒轮询（间隔可调，最小 500ms），彩色分级（启动橙 / 联邦紫 / 错误红 / 时间戳灰），筛选 chips、暂停/继续、自动滚底
+- 亮暗双主题（🌓 切换，localStorage 持久化），窄屏 430px 无横向溢出
+- 端口被占自动 +1~+9；**只绑 127.0.0.1**，非回环绑定强制令牌 + Host 校验
+
+### 面板的安全边界（两种形态，规则不同）
+
+| 形态 | 绑定 | 鉴权 |
+|------|------|------|
+| 宿主（默认） | `127.0.0.1` | 默认免令牌（本机便利工具）；`GRAFT_MAX_UI_TOKEN=<串>` 可显式开启 |
+| 容器 / 非回环 | `0.0.0.0` | **强制令牌**（未给则启动时随机生成，URL 打到 stderr）+ Host 白名单 + 无鉴权探活 `/healthz` |
+
+- 令牌携带方式：`Authorization: Bearer`、`?token=`、或 Cookie（点一次带 `?token=` 的 URL 自动种下 HttpOnly Cookie）
+- 所有响应带 `X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`X-Frame-Options: DENY`、最小 CSP
+- Host 伪造（DNS rebinding）→ `403`；无令牌打数据端点 → `401`
+- 前端是独立工程（`panel/`，esbuild 构建到 `dist/panel/`）；`GRAFT_MAX_UI_LEGACY=1` 回退旧版内联页面（保留一个 release 周期）
 
 截图见 `e2e/dashboard-dark.png` / `e2e/dashboard-light.png` / `e2e/dashboard-storage.png`（存储视图）。
 
@@ -286,6 +307,12 @@ node e2e/e2e-docker.mjs      # D1 版本 / D2 MCP 握手 / D3 真实调用 / D4 
 | `GRAFT_MAX_UI_HOST` | `127.0.0.1` | 面板绑定地址。容器里必须 `0.0.0.0` 才能被 `-p` 端口映射打到（Dockerfile 已设）；宿主用法保持默认即可 |
 | `GRAFT_MAX_AUTO_INDEX` | 开 | `0` 关闭「编辑后自动增量索引」（post-edit 触发后台建图） |
 | `GRAFT_MAX_SYNC_THROTTLE_MS` | 60000 | 自动增量索引的最小间隔（毫秒） |
+| `GRAFT_MAX_UI_TOKEN` | 自动 | 面板数据端点令牌。非回环绑定**强制**开启（未给则随机生成）；回环默认关，设非空值即开启，`0` 显式关闭（仅回环形态有效） |
+| `GRAFT_MAX_UI_LEGACY` | 关 | `1` 回退旧版内联面板（新面板在 `panel/`，构建到 `dist/panel/`） |
+| `GRAFT_MAX_ICM` | 开 | ICM 时序记忆。`0` 关闭；`2` 干跑（只计数不 spawn，E2E/单测用） |
+| `GRAFT_MAX_ICM_TIMEOUT_MS` | 5000 | 单次 ICM 批量写入的硬超时 |
+| `GRAFT_MAX_FIRST_BUILD_WAIT_MS` | 20000 | 首查等建图的上限（上游是 90000；超时后立刻返回"后台建图中+重试指引"） |
+| `GRAFT_MAX_FED_WATCH` | 开 | `0` 关闭联邦后端的 60s 探针心跳（心跳让"中途装上的后端"自动出现） |
 | `GRAFT_MCP_NPX` | 关 | 上游兼容：强制 npx 形式注册（原版行为） |
 
 ---
@@ -296,13 +323,16 @@ node e2e/e2e-docker.mjs      # D1 版本 / D2 MCP 握手 / D3 真实调用 / D4 
 
 ```powershell
 npx tsc --noEmit               # 类型 0 错误
-npm run build                  # 构建全绿
+npm run build                  # 构建全绿（含 panel 前端的 tsc + esbuild）
 node dist/cli.js --version     # 0.28.0-max.N
-npm test                       # 基线 4036 pass / ~10 fail（上游本机 flaky）
-node e2e/e2e-federation.mjs    # 9/9
+npm test                       # 本轮基线：0 fail（上游 4156 tests）
+node e2e/e2e-ci-smoke.mjs      # 24/24（自包含：不依赖外部后端，CI 也跑这条）
+node e2e/e2e-federation.mjs    # 9/9（需真实 qmd/gitnexus）
 node e2e/e2e-dashboard.mjs     # 4/4
 node e2e/e2e-live-scenario.mjs # 8/8
 node e2e/e2e-idempotent.mjs    # 9/9
+node e2e/ui-interact.mjs       # 26/26（Playwright，零 JS 错误；需先 build）
+node e2e/e2e-backend-hotplug.mjs # 9/9（后端热插拔：装完不用重启）
 ```
 
 **净新增失败 = 0 才算过**（对比改动前的 fail 集合）。

@@ -3,6 +3,79 @@
 所有重要改动记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循语义化：`0.28.0-max.N`（上游版本-max 补丁位）。
 
+## [0.28.0-max.10] — 2026-11
+
+> 本轮对应 `改进计划/下一步改进指南.md` v3.0 的 **N0–N20 全量 21 张卡**（批次 A→E）。
+> 每一个"已修复"都有单测/curl/E2E 命令输出作为证据，见 `workflow_status.md` §4 与 `evidence/`。
+
+### 安全（P1，全部有实测证据）
+
+- **面板不再是无鉴权的网络面**：非回环绑定（容器）**强制令牌**（未给则随机生成，完整 URL 只打到 stderr，
+  绝不进 `mcp.log`——那正是 `/tail` 读的文件）+ Host 白名单（`Host: evil.com` → 403）+ 安全响应头
+  （nosniff / Referrer-Policy / X-Frame-Options / 最小 CSP）；`GET /?token=` 一次种 HttpOnly Cookie。
+  回环形态默认免令牌（本机便利工具），`GRAFT_MAX_UI_TOKEN` 可显式开/关。
+- **容器端口只发布到回环**：`docker-compose.max.yml` 改 `127.0.0.1:24688:24688`；healthcheck 改打无鉴权的 `/healthz`。
+- **用户全局文件一律原子写**：新增 `src/util/atomic-write.ts`（同目录 tmp → rename + `.bak` 轮转 3 份 +
+  可选 `JSON.parse` 校验），接入 `max-prompt.ts`(5 处)、`claude-global.ts`(4 处)、`mcp-config.ts`(2 处)。
+  历史事故：`.claude.json` 曾被截成 246KB→852B。
+- **隐私**：`.gitignore` 覆盖 `memories.db*` / `*.db.backup-*` / `.mcp.json` / `.trail/`，并加 pre-commit
+  钩子（`npm run hooks:install`）拒绝提交这些文件——避免一次 `git add -A` 把 8140 条个人记忆推到公开仓库。
+
+### 修复
+
+- **`?n=abc` 打 `/tail` 返回空 body**（`NaN` 传进 `slice()`）：现在回退默认 200 行（新测试抓到）。
+- **`dlogBlock` 完全绕过汉化层**：所有工具调用/返回的日志标题一直是英文，对应 I18N 规则被误判成
+  "死代码"。修根因（标题走 i18n、body 原文不翻），并删掉两条真的永远匹配不到的旧规则。
+- **多容器会话串行改错行**：`bumpRequests`/`endSession` 原来按裸 pid 找自己那一行，容器里每个进程都是
+  pid 1。统一 `host+pid` 身份，并把计数改成内存累加 + 2s 节流落盘（原为每次调用同步读改写）。
+- **`liveSessions()` 读路径写盘**：GET 接口不再有写副作用，自净挪到写路径。
+- **首查黑屏 90 秒**：等待窗口降到 20s（`GRAFT_MAX_FIRST_BUILD_WAIT_MS`），超时返回
+  "后台建图中（已 N 秒）+ 重试指引"；`building.json` 的写/删改由建图子进程负责（P3-9），
+  面板不再显示"建完了"的假象，残留超过硬超时自动判陈旧。
+- **联邦输出契约对齐 CLI**：`max_find_docs` 内嵌路径与 spawn 路径现在都走同一个纯函数，
+  输出 `qmd://<collection>/<path>:<line> #<docid>`（格式以真实 `qmd search` 输出为基准，
+  样本固定在 `test/fixtures/qmd-cli-sample.txt`）。
+- **联邦健壮性三补**：gitnexus 握手后摘掉 stdout 监听器（消除 O(n²) 重解析与内存上涨）；
+  探针 TTL（成功 5 分钟/失败 30 秒）+ `notifications/tools/list_changed`；子进程 stdout 8MB 上限，
+  超限即 kill 并按软错误返回。另修缓存键序（`{a,b}` 与 `{b,a}` 现在命中同一缓存）。
+
+### 新增
+
+- **面板拆成真前端工程**：`panel/{index.html,main.ts,style.css}` → esbuild → `dist/panel/`（17.4KB，
+  零运行时依赖）。拿到 tsc 类型检查 + Playwright 契约测试；旧内联版保留为 `GRAFT_MAX_UI_LEGACY=1` 回退。
+- **面板新卡**：「工具耗时」（次数/平均/**p50/p95**/错误，把 max.9 静默弄丢的卡片补回来）、
+  「联邦后端」（三后端探针状态 + 安装命令一键复制 + **「重试探针」**）、「索引新鲜度」（图谱指纹 vs 工作区）、
+  存储卡**按仓库分组**。
+- **多仓库**：一张面板认识全部活跃会话的仓库（`knownRoots()`），`/storage` 返回 `roots` 分组，
+  不需要多进程改参数。
+- **后端热插拔**：装完 qmd/gitnexus/ccc 不用重启会话——探针心跳 + `/reprobe` + `list_changed`。
+- **ICM 时序批量化**：满 32 行或 60s 一次 `icm.exe store`（原来每次调用一个进程、单次实测 3.26s），
+  5s 硬超时、并发 1、先落 `tool-timeline.jsonl`（数据永不丢）。`GRAFT_MAX_ICM=0/2`（关/干跑）。
+- **CI 门禁** `.github/workflows/ci-max.yml`：tsc + build + 版本断言 + 打包完整性 + 自包含冒烟 E2E（24 条）。
+- **自包含 E2E** `e2e/e2e-ci-smoke.mjs`（不依赖外部后端/浏览器，CI 与任何机器可跑）。
+
+### 测试
+
+- 自研模块从**零单测**补到 9 个新测试文件 90+ 条断言：`devlog-sessions`、`devlog-i18n`、`icm-timeline`、
+  `atomic-write`、`max-prompt`、`fed-qmd`、`fed-cache`、`fed-robustness`、`dashboard-routes`、
+  `dashboard-security`、`first-build-wait`、`ignored-files`。
+- `e2e/ui-interact.mjs` 重写：26 条断言（含轮询频率、暂停语义、p95≥p50、窄屏溢出、零 `pageerror`）。
+- 新增 `e2e/e2e-backend-hotplug.mjs`：9/9，真 PATH 假后端 + 真面板 + 真 stdio。
+
+### 文档
+
+- 新增 `docs-selfdev/面板架构.md`、`联邦契约.md`（输出格式 + 12 条软错误矩阵）、`失败模式手册.md`。
+- 新增 `policy.md`（可判定的硬门禁）、`test_ledger.md`、`workflow_status.md` 本轮证据。
+- README 修正工具口径（6 + 最多 3 个联邦，不是"8 个"）、补 `max_search_semantic`、
+  面板安全两形态表、8 个新环境变量、验证链。
+
+### 已知限制
+
+- `npm publish` / Docker Hub 推送仍 **blocked**（无账号）；本轮发布以 `npm pack` + 干净目录全局安装
+  + 本机 Docker 热更新验证闭环。
+- 压测为本机单机数据，不构成生产并发基准。
+- `INSTALL_CCC=1` / `INSTALL_GITNEXUS=1` 镜像仍未实测（默认关，各 +2GB）。
+
 ## [0.28.0-max.9] — 2026-11
 
 ### 修复（真实 bug，截图验收抓出来的）
