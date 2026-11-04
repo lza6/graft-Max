@@ -40,7 +40,7 @@
 | **N4** | devlog 身份 + 计数节流 | done | `test/devlog-sessions.test.ts` 9/9（同 pid 不同 host 只改本机行；10 次 bump 只落盘 1 次） |
 | **N5** | 联邦输出契约对齐 CLI | done | `test/fed-qmd.test.ts` + fixture（真实 `qmd search` 输出）；E2E 断言 `qmd://…:line #docid` |
 | **N6** | 联邦健壮性三补 | done | `test/fed-robustness.test.ts`（监听器归零 / probe 30s+5min TTL / 8MB kill）+ `fed-cache` 键序 |
-| **N7** | 自研模块单测补齐 | done | 10 个新测试文件、90+ 断言（见 `test_ledger.md`） |
+| **N7** | 自研模块单测补齐 | done | **12 个新测试文件 / 107 条用例**（`git diff --diff-filter=A c7fd6ab..HEAD -- test/` 实测；见 `test_ledger.md`） |
 | **N8** | 面板前端拆工程 | done | `panel/` → `dist/panel/`；`GRAFT_MAX_UI_LEGACY=1` 回退；ui-interact 26/26 |
 | **N9** | 工具耗时卡 + 性能分位 | done | `panel` 工具耗时卡（calls/avg/p50/p95/errors）+ `/stats.toolStats`；断言 p95≥p50 |
 | **N10** | 面板契约测试 | done | `ui-interact` 26/26（含轮询频率、暂停语义、零 JS 错误） |

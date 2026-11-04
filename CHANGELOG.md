@@ -61,7 +61,7 @@
 
 ### 测试
 
-- 自研模块从**零单测**补到 9 个新测试文件 90+ 条断言：`devlog-sessions`、`devlog-i18n`、`icm-timeline`、
+- 自研模块从**零单测**补到 **12 个新测试文件 / 107 条用例**（`git diff --diff-filter=A` 实测）：`devlog-sessions`、`devlog-i18n`、`icm-timeline`、
   `atomic-write`、`max-prompt`、`fed-qmd`、`fed-cache`、`fed-robustness`、`dashboard-routes`、
   `dashboard-security`、`first-build-wait`、`ignored-files`。
 - `e2e/ui-interact.mjs` 重写：26 条断言（含轮询频率、暂停语义、p95≥p50、窄屏溢出、零 `pageerror`）。

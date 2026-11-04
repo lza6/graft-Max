@@ -6,6 +6,9 @@
 
 ## 1. 本轮新增（自研模块从零单测到有网）
 
+> 实测口径：`git diff --name-only --diff-filter=A c7fd6ab..HEAD -- test/` → **12 个测试文件**
+> （外加 1 个 fixture `test/fixtures/qmd-cli-sample.txt`），合计 **107 条 `test()` 用例**。
+
 | 文件 | 覆盖什么 | 关键断言 | 状态 |
 |------|---------|---------|------|
 | `test/devlog-sessions.test.ts` | 会话注册表：host+pid 身份、计数节流、自净、跨 host 判活、坏 JSON 自愈 | 同 pid 不同 host 只改本机行；10 次 bump 不在热路径落盘、flush 一次写 10；GET 不写盘；死 pid 被剪 | 已验证 9/9 |
