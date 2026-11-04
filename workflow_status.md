@@ -170,7 +170,9 @@ SOP 落地：`docs-selfdev/上游同步SOP.md`（热路径 10 文件清单、步
 | M13 覆盖率门禁 | done（scripts/check-coverage.mjs 入 CI；8 文件实测全 PASS） | 命令输出 |
 | M13 CI flaky 治理 | 部分（skills-credit 文件级重跑入 ci.yml，断言零改动；mcp-tools/claude-codex-pre-bash 各 1 次并发 flaky 入观察） | CI 日志 |
 | M14 fedHealth 形状 | done（全不装/全装两端 + 直测，16/16） | e2e/e2e-fed-shape.mjs |
-| M15 打包 | done（max.11 tarball 全局安装验证） | 命令输出 |
+| M15 打包 | done（max.11 tarball 1540 文件；全局安装 `--version` = 0.28.0-max.11） | 命令输出 |
+| 部署热更新 | done（镜像重建 → compose 重建 → verify-compose 12/12；回滚点 `graft-max:rollback-max10`） | 命令输出 |
+| 压测（max.11） | 50 并发 3 轮中位 **p95 59.6ms** / 1054.6 req/s / 零错误；`/storage` 20 并发 p99 13.8ms；`/healthz` 压力下 p99 3.4ms | `e2e/panel-load.mjs` 10/10 |
 | M1/M2/M17 发布 | blocked（无 npm/Docker Hub 账号） | — |
 | M3/M6/M12 | 未启动（P3 观察项/大改，指南允许按需） | — |
 
