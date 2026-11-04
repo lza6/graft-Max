@@ -19,7 +19,9 @@ const logFile = join(dir, 'mcp.log');
 delete process.env.GRAFT_MAX_LOG_REDACT; // 默认开
 process.env.GRAFT_MAX_LOG = logFile;
 
-const { dlog, dlogBlock, redact, __resetRedactCacheForTest } = await import('../src/mcp/devlog.js');
+const devlogMod = await import('../src/mcp/devlog.js');
+devlogMod.setDevlogHomeForTest(dir); // GRAFT_MAX_LOG 已指向 logFile，setter 会以它为准
+const { dlog, dlogBlock, redact, __resetRedactCacheForTest } = devlogMod;
 const settle = () => new Promise((r) => setTimeout(r, 80));
 const readLog = (): string => (existsSync(logFile) ? readFileSync(logFile, 'utf8') : '');
 

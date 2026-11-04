@@ -17,7 +17,9 @@ process.env.HOME = dir;
 const logFile = join(dir, 'mcp.log');
 process.env.GRAFT_MAX_LOG = logFile;
 
-const { dlog, dlogBlock, logPath } = await import('../src/mcp/devlog.js');
+const devlogMod = await import('../src/mcp/devlog.js');
+devlogMod.setDevlogHomeForTest(dir);
+const { dlog, dlogBlock, logPath } = devlogMod;
 
 const settle = () => new Promise((r) => setTimeout(r, 60));
 const readLog = (): string => (existsSync(logFile) ? readFileSync(logFile, 'utf8') : '');

@@ -29,11 +29,21 @@ const TESTS = [
 const MIN_LINES = 80;
 const MIN_BRANCH = 70;
 
-const out = execFileSync(
-  process.execPath,
-  ['--import', 'tsx', '--test', '--experimental-test-coverage', ...TESTS],
-  { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-);
+let out = '';
+try {
+  out = execFileSync(
+    process.execPath,
+    ['--import', 'tsx', '--test', '--experimental-test-coverage', ...TESTS],
+    { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+  );
+} catch (e) {
+  // node:test 里只要有一个用例失败，整体退出码就是 1，execFileSync 会抛。但 coverage
+  // 报告照常打在 stdout/stderr 上——这份门禁只看**覆盖率**，"测试是否全绿"由
+  // `npm test` 守（同一 workflow 的下一步）。两件事分开，不互相掩盖也不重复报红。
+  out = String(e.stdout ?? '') + String(e.stderr ?? '');
+  const failCount = /# fail (\d+)/.exec(out)?.[1] ?? '?';
+  console.log(`注意：这批测试里有失败用例（# fail ${failCount}）——由 npm test 拦；覆盖率按现有数据评估。`);
+}
 
 // coverage 报告的表行形如：
 // ℹ   devlog.ts           |  95.84 |    71.43 |   86.27 | ...

@@ -62,11 +62,15 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Re-run known-flaky file once on failure (skills-credit)
+      - name: Re-run known-flaky files once on failure
         if: failure()
         run: |
-          echo "First run failed. Re-running the known-flaky file alone (assertions unchanged)."
+          echo "First run failed. Re-running the known-flaky files alone (assertions unchanged)."
+          # M13-flaky 治理：这一族文件在慢 runner / 高并发下偶发计时型失败，
+          # 单独重跑必绿（max.10/max.11 收尾各复现过一次，均已记录在 workflow_status §5）。
+          # 断言零改动、失败语义不放宽：仍失败才算真红。
           node --import tsx --test test/skills-credit-1b-review.test.ts test/skills-credit-1b.test.ts test/skills-credit-2.test.ts test/skills-credit.test.ts
+          node --import tsx --test test/skills-session-start.test.ts test/claude-codex-journeys-2.test.ts test/mcp-tools.test.ts test/claude-codex-pre-bash.test.ts
 
   node24-wasm:
     name: Node 24 WASM regression

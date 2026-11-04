@@ -22,6 +22,8 @@ mkdirSync(gmHome, { recursive: true });
 const sessionsFile = join(gmHome, 'sessions.json');
 
 const devlog = await import('../src/mcp/devlog.js');
+// 单进程全量测试时模块可能已被别处加载（homedir 定死），显式重定位到沙箱。
+devlog.setDevlogHomeForTest(gmHome);
 const { bumpRequests, flushPendingBumps, endSession, liveSessions, registerSession, touchSession, SESSIONS_FILE } = devlog;
 
 assert.equal(SESSIONS_FILE, sessionsFile, 'sessions.json must live under the sandboxed home');

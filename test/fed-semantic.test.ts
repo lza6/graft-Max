@@ -57,10 +57,13 @@ function installCcc(mode: 'ok' | 'fail' | 'garbled', searchOut = ''): void {
 
 const withPath = (fn: () => Promise<void>): Promise<void> => {
   const saved = process.env.PATH;
-  // PATH **只含**沙箱 bin：本机真 ccc.exe 必须挖掉——runCli 的 direct 路径（无 shell）
-  // 会命中 .exe 而不是我们的 .cmd（Windows 的可执行解析优先 .exe），前置 PATH 救不了。
-  // 挖掉后 direct ENOENT → 走 shell 兜底 → 假 ccc.cmd 生效。probe 只需要 ccc 一个名字。
-  process.env.PATH = binDir;
+  // PATH 按平台处理，两边的原因不同且都实测过：
+  //  - POSIX：假 ccc 是 `#!/bin/sh` 脚本，脚本内部要用 /bin 下的命令 —— 必须保留原 PATH，
+  //    只把 binDir 前置（CI 上没有真 ccc，不存在被抢的问题）。
+  //  - Windows：direct spawn 只会试 .exe/.com（libuv 不认 .cmd），若保留原 PATH 就会
+  //    直接命中系统里的真 ccc.exe（实测），所以只留 binDir → direct ENOENT → 走 shell
+  //    兜底 → cmd 在 binDir 找到假 ccc.cmd。
+  process.env.PATH = isWin ? binDir : `${binDir}:${saved ?? ''}`;
   return fn().finally(() => {
     process.env.PATH = saved;
     resetFedStateForTest(); // 清探针缓存，下一个 mode 重新探
@@ -113,7 +116,9 @@ test('limit 夹到 ≤20（schema 侧限幅的服务端兜底）', async () => {
     // 读到真实的 --limit N（传空 results 的话 limit 根本不会被断言到）。
     const script = `@echo off\r\necho {\"results\": [{\"file_path\": \"a.ts\", \"start_line\": 1, \"end_line\": 1, \"score\": 0.5, \"content\": \"ARGS %*\"}]}\r\nexit /b 0\r\n`;
     writeFileSync(join(binDir, 'ccc.cmd'), script, 'utf8');
-    writeFileSync(join(binDir, 'ccc'), `#!/bin/sh\necho '{"results": [{"file_path": "a.ts", "start_line": 1, "end_line": 1, "score": 0.5, "content": "ARGS $*"}]}'\n`, 'utf8');
+    writeFileSync(join(binDir, 'ccc'), `#!/bin/sh
+printf '%s\n' "{\\"results\\": [{\\"file_path\\": \\"a.ts\\", \\"start_line\\": 1, \\"end_line\\": 1, \\"score\\": 0.5, \\"content\\": \\"ARGS $*\\"}]}"
+`, 'utf8');
     try {
       chmodSync(join(binDir, 'ccc'), 0o755);
     } catch {
@@ -130,13 +135,11 @@ test('limit 夹到 ≤20（schema 侧限幅的服务端兜底）', async () => {
 
 test('lang/path 参数透传给 ccc 命令行（limit 测试同款 argv 回显）', async () => {
   await withPath(async () => {
-    const script = `@echo off
-echo {"results": [{"file_path": "a.ts", "start_line": 1, "end_line": 1, "score": 0.5, "content": "ARGS %*"}]}
-exit /b 0
-`;
+    const script = `@echo off\r\necho {\"results\": [{\"file_path\": \"a.ts\", \"start_line\": 1, \"end_line\": 1, \"score\": 0.5, \"content\": \"ARGS %*\"}]}\r\nexit /b 0\r\n`;
     writeFileSync(join(binDir, 'ccc.cmd'), script, 'utf8');
+    // POSIX 版必须用双引号包 printf 的参数：单引号会阻止 $* 展开（Linux 上 argv 回显变字面量）
     writeFileSync(join(binDir, 'ccc'), `#!/bin/sh
-echo '{"results": [{"file_path": "a.ts", "start_line": 1, "end_line": 1, "score": 0.5, "content": "ARGS $*"}]}'
+printf '%s\\n' "{\\\"results\\\": [{\\\"file_path\\\": \\\"a.ts\\\", \\\"start_line\\\": 1, \\\"end_line\\\": 1, \\\"score\\\": 0.5, \\\"content\\\": \\\"ARGS $*\\\"}]}"
 `, 'utf8');
     try {
       chmodSync(join(binDir, 'ccc'), 0o755);

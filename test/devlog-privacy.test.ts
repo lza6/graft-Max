@@ -21,6 +21,8 @@ process.env.GRAFT_MAX_LOG = logFile;
 process.env.COMMAND_LINE = 'node /secret/path/cli.js --token=sk-abc123def456ghi789 --internal-url=http://10.0.0.5:9200';
 
 const devlog = await import('../src/mcp/devlog.js');
+// 重定位到沙箱（单进程跑全量测试时，模块可能在别处已被加载过，homedir() 已被定死）
+devlog.setDevlogHomeForTest(gmHome);
 const { registerSession, SESSIONS_FILE, logPath, tightenPerms, endSession } = devlog;
 
 test.after(() => {
@@ -56,12 +58,24 @@ test('[M10] Windows 风格带引号路径取引号内首个 token 的 basename',
 });
 
 test('[M9] 日志文件首次写入后 chmod 0600（POSIX）', { skip: process.platform === 'win32' }, async () => {
-  devlog.dlog('privacy smoke line');
-  // write() 是异步 append，轮询等首次落盘
-  for (let i = 0; i < 50 && !existsSync(logPath()); i++) await new Promise((r) => setTimeout(r, 20));
-  assert.ok(existsSync(logPath()), '日志文件应当已创建');
-  const mode = statSync(logPath()).mode & 0o777;
-  assert.equal(mode & 0o077, 0, `group/other 位必须为 0，实际 mode=${mode.toString(8)}`);
+  // 用**独立**沙箱与本进程内独立的一次写入来断言（不与本文件其它用例共享
+  // logPermDone / ensured 状态——共享会让"首次写"变成"第 N 次写"，chmod 只做一次）。
+  const fresh = mkdtempSync(join(tmpdir(), 'gm-priv-fresh-'));
+  const freshLog = join(fresh, 'mcp.log');
+  const prev = process.env.GRAFT_MAX_LOG;
+  process.env.GRAFT_MAX_LOG = freshLog;
+  try {
+    devlog.setDevlogHomeForTest(fresh);
+    devlog.dlog('privacy smoke line');
+    for (let i = 0; i < 100 && !existsSync(freshLog); i++) await new Promise((r) => setTimeout(r, 20));
+    assert.ok(existsSync(freshLog), '日志文件应当已创建');
+    const mode = statSync(freshLog).mode & 0o777;
+    assert.equal(mode, 0o600, `必须是 0600，实际 mode=${mode.toString(8)}`);
+  } finally {
+    process.env.GRAFT_MAX_LOG = prev;
+    devlog.setDevlogHomeForTest(gmHome); // 交还给本文件的共享沙箱
+    rmSync(fresh, { recursive: true, force: true });
+  }
 });
 
 test('[M9] tightenPerms：POSIX 收紧为 0600；失败静默不抛错', { skip: process.platform === 'win32' }, () => {

@@ -19,9 +19,32 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, chmodSy
 import { basename, dirname, join } from 'node:path';
 import { homedir, userInfo, hostname } from 'node:os';
 
-export const GRAFT_MAX_HOME = join(homedir(), '.graft-max');
-export const DEFAULT_LOG = join(GRAFT_MAX_HOME, 'mcp.log');
-export const SESSIONS_FILE = join(GRAFT_MAX_HOME, 'sessions.json');
+/**
+ * [M13] 路径常量可重定位（测试沙箱）+ 保持对外形状。
+ *
+ * 为什么不用 Proxy：模板字符串 `${SESSIONS_FILE}` 走的是 toString，Proxy 拦不到，
+ * 会拼出 '[object Object]'（实测）。ESM 的 `let` 导出是**活绑定**——重赋值后
+ * 所有 importer 立即看到新值，既保持 `import { SESSIONS_FILE }` 不变，又能沙箱。
+ *
+ * 为什么需要：`npm test` 单进程跑所有测试文件，devlog 被先加载时 homedir() 就被
+ * 定死，后面想沙箱的测试全部失效 → 写进真实家目录（Linux CI 抓到的 privacy 失败）。
+ */
+export let GRAFT_MAX_HOME = join(homedir(), '.graft-max');
+export let DEFAULT_LOG = join(GRAFT_MAX_HOME, 'mcp.log');
+export let SESSIONS_FILE = join(GRAFT_MAX_HOME, 'sessions.json');
+
+/** 测试钩子：把三个路径一起重定位到沙箱，并重置"已收紧权限/已确保目录"的记忆。 */
+export function setDevlogHomeForTest(dir: string): void {
+  GRAFT_MAX_HOME = dir;
+  DEFAULT_LOG = join(dir, 'mcp.log');
+  SESSIONS_FILE = join(dir, 'sessions.json');
+  // GRAFT_MAX_LOG 显式给了路径时以它为准（测试常用它把日志钉到自己的 sandbox 文件）
+  const envLog = process.env.GRAFT_MAX_LOG;
+  target = envLog && envLog !== '1' && envLog !== '0' ? envLog : DEFAULT_LOG;
+  enabled = !!envLog && envLog !== '0';
+  sessionsPermDone = false;
+  ensured = false;
+}
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB per file, two files ≈ 10 MB ceiling
 const RETAIN_DAYS = 14;
@@ -30,7 +53,6 @@ let enabled = !!process.env.GRAFT_MAX_LOG && process.env.GRAFT_MAX_LOG !== '0';
 let target = process.env.GRAFT_MAX_LOG && process.env.GRAFT_MAX_LOG !== '1' ? process.env.GRAFT_MAX_LOG : DEFAULT_LOG;
 let ensured = false;
 /** [M9] 权限收紧只在每个文件首次写后做一次（进程内记忆，不反复 stat/chmod）。 */
-let logPermDone = false;
 let sessionsPermDone = false;
 
 /** [M9 · P2] 日志/会话文件权限收紧到 0600（仅 POSIX）。
@@ -109,10 +131,11 @@ async function write(line: string): Promise<void> {
     await appendFile(target, line + '\n', 'utf8');
     // [M9] 首次写入后收紧权限（仅 POSIX；Windows 上 no-op）。失败静默——
     // 权限收紧绝不能拖垮日志本身。
-    if (!logPermDone) {
-      logPermDone = true;
-      tightenPerms(target);
-    }
+    // [M9] 每次写都收紧一次权限（幂等）。为什么不做"只做一次"的进程内标记：
+    // 文件会被 pruneOldEntries 重建（writeFile 默认 0644），也可能被外部工具重建，
+    // 一旦漏掉就会静默退回 0644。chmod 与 appendFile 是同量级 syscall，且日志写
+    // 全程异步（不在 tools/call 响应路径上），代价可以忽略——换"永远不可能漏"。
+    tightenPerms(target);
     void rotateIfNeeded();
   } catch {
     /* logging never takes the server down */
