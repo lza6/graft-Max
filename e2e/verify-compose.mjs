@@ -33,7 +33,8 @@ const sh = (cmd, args) => spawnSync(cmd, args, { encoding: 'utf8', timeout: 120_
 // 3) 容器内版本
 {
   const v = (sh('docker', ['exec', NAME, 'node', '/app/dist/cli.js', '--version']).stdout ?? '').trim();
-  check('3 容器内版本是 max.10', /^0\.28\.0-max\.10$/.test(v), v);
+  // 不写死补丁号：容器里跑的是"当前发布版"，补丁位随版本进位（max.10 → max.11 …）
+  check('3 容器内版本是 0.28.0-max.N', /^0\.28\.0-max\.\d+$/.test(v), v);
 }
 
 // 4) 面板资源在新镜像里（N8 产物）
