@@ -131,10 +131,13 @@ graft-max viz --port ..  / => 200 2417B ; /app.js => 200 35825B
 - CI 的**真绿勾**：已实测。`CI (graft-Max gate)` 在 `4d63b5e` 上 **ubuntu-latest ✅ + windows-latest ✅**
   （双平台都跑 tsc / build / 版本断言 / 打包完整性 / 自包含 E2E；ubuntu 额外跑 `npm test` 通过，
   run id 41752856232）。
-- **遗留一条上游 CI 红灯**：上游自带的 `.github/workflows/ci.yml`（node 20，跑 `npm test`）在
-  `4d63b5e` 的 ubuntu leg 仍失败（windows leg 通过）。本轮新 gate 用 node 22 且全绿，
-  说明这是 **Node 20 特有的**上游测试问题，与 Max 改动无关（max.9 时两个 leg 都红）。
-  已记入 `改进计划/下一步改进指南.md` 的遗留清单（M13 一带处理：给 ci.yml 也升到 22 或定位该用例）。
+- **上游 CI（node 20 的 `ci.yml`）已全绿**：`.gitattributes`（fixture 行尾）与 icm `unref`
+  两个平台各自的问题修掉后，`f427035` 上 `CI` 双 leg **success**、`CI (graft-Max gate)` 双 leg **success**
+  —— 仓库史上第一次两条流水线同时全绿。
+- **唯一一次 failure 是 flaky**：`b78f796`（只改了一张 png 截图）的 windows leg 里
+  `claude-codex-journeys` 的 "step 1 wired" 偶发失败；同一提交集上 `57d88e6`/`f427035` 均 success、
+  本机同用例 3/3 绿、且该提交相对邻居只动了二进制 png —— 判定为计时型 flaky，不是回归。
+  已列入下轮 M13（给该用例加确定性闸门）。
 - 压测为本机单机数据，不构成生产并发基准。
 - `INSTALL_CCC=1` / `INSTALL_GITNEXUS=1` 镜像未实测（默认关，各 +2GB）。
 - 面板 "建图进度" 只到"已耗时 N 秒 + 仓库"，没有文件级进度（build 侧未暴露中途计数）。
