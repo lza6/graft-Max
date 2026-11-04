@@ -16,26 +16,23 @@ import { WorkspaceConnector, type RemotePrompt, type RemoteTool } from './connec
 import { teamLine, teamWorkspace } from '../cloud/team-file.js';
 import { KeptListing, within } from './kept-listing.js';
 // [graft-Max] sibling-tool federation: qmd/gitnexus proxied through this server.
-import { availableFederatedTools, callFederatedTool, FEDERATED_TOOL_NAMES, shutdownFederatedSessions } from './federation.js';
+import {
+  availableFederatedTools,
+  callFederatedTool,
+  FEDERATED_TOOL_NAMES,
+  onBackendsChanged,
+  shutdownFederatedSessions,
+  startFedProbeWatch,
+} from './federation.js';
 // [graft-Max] developer log (GRAFT_MAX_LOG=1 or a path; default ~/.graft-max/mcp.log)
 import { dlog, dlogBlock, clip, logPath, registerSession, endSession, bumpRequests, touchSession } from './devlog.js';
-import { startDashboard } from './dashboard.js';
+import { setToolsRefreshHook, startDashboard } from './dashboard.js';
 // [graft-Max] 全局提示词注入（GRAFT_MAX_MCP=1 时生效，切回原版即摘除）
 import { upsertGlobalPrompt, removeGlobalPrompt, ensurePromptBlock } from '../hosts/max-prompt.js';
-// [graft-Max] ICM 时序记忆：工具调用史异步写入 icm（timeline），不阻塞响应
-import { spawn as icmSpawn } from 'node:child_process';
-
-/** 工具调用完成后异步记入 icm 时序（fire-and-forget；失败静默）。
- * 内容精简：工具名 + 关键参数 + 耗时 + isError——够 icm recall 时定位上下文。 */
-function recordIcmTimeline(tool: string, args: Record<string, unknown>, ms: number, isError: boolean): void {
-  try {
-    if (process.env.GRAFT_MAX_ICM === '0') return; // 可关
-    const brief = JSON.stringify(args).slice(0, 200);
-    const content = `[${new Date().toISOString()}] ${tool} ${ms}ms isError=${isError} args=${brief}`;
-    const child = icmSpawn('icm.exe', ['remember', content], { windowsHide: true, stdio: 'ignore', shell: false });
-    child.on('error', () => {/* icm 不在 PATH 静默 */});
-  } catch {/* 永不阻塞 */}
-}
+// [graft-Max N3] ICM 时序记忆：批量写入（JSONL 先落地 + 满 32 行/60s 一个
+// icm 进程 + 5s 超时 + 并发 1）。原实现每次工具调用 spawn 一个 icm.exe（单次
+// 实测 3.26s），既污染记忆库又把 hot path 变成进程工厂 —— 见 icm-timeline.ts 头注释。
+import { recordTimeline, flushTimelineOnExit } from './icm-timeline.js';
 
 /**
  * MCP tool name → the command enum the telemetry contract knows. A tool absent
@@ -135,8 +132,9 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
   dlog(`=== graft-Max MCP server boot === root=${root} brainsOnly=${brainsOnly} version=${version} pid=${process.pid} federated=on log=${logPath()}`);
   // [graft-Max] identity marker for this process tree: tool names render as
   // max_*, hooks/children inherit it. Set BEFORE anything reads brand().
-  if (isMax()) process.env[MAX_BRAND_ENV] = '1';
-  else process.env[MAX_BRAND_ENV] = '1'; // Max 二进制默认即 Max 身份
+  // [graft-Max P3-1] Max 二进制恒为 Max 身份：上游那版是 if/else 两支同体，等价于
+  // 无条件设置。保留一行并说清语义，避免以后误以为这里存在分支逻辑。
+  process.env[MAX_BRAND_ENV] = '1';
   registerSession(root, version);
   // 自动注入/摘除全局提示词：Max 开着就在，切原版自动摘（配合 switch-mcp.py）
   if (process.env.GRAFT_MAX_MCP === '1') {
@@ -181,7 +179,22 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
     () => availableFederatedTools(root),
     changed('notifications/tools/list_changed'),
   );
-  if (!brainsOnly && (dirOverride !== undefined || hasGraftIndex(root) || !!mainWorktreeRoot(root))) void federated.refresh();
+  const federatedOn = !brainsOnly && (dirOverride !== undefined || hasGraftIndex(root) || !!mainWorktreeRoot(root));
+  if (federatedOn) void federated.refresh();
+  // [N12] 联邦后端"中途装上"要即时可用，而不是重启 MCP server（=重开会话）：
+  //   1) 探针心跳：成功结果缓存 5 分钟、失败 30 秒（federation 的 TTL），心率 60s，
+  //      TTL 内直接吃缓存不 spawn —— 所以平均每 5 分钟才有一次 `--version`。
+  //   2) 探针从"不可用 → 可用"时，叫醒 KeptListing，由它发
+  //      notifications/tools/list_changed（协议里现成的通道，见 kept-listing.ts）。
+  // 只在"这个仓库真的 advertise 了工具"时开，未邀请仓库不付这份成本。
+  // 关掉：GRAFT_MAX_FED_WATCH=0。
+  if (federatedOn && process.env.GRAFT_MAX_FED_WATCH !== '0') {
+    onBackendsChanged(() => void federated.refresh());
+    startFedProbeWatch();
+  }
+  // [N12] 面板「重试探针」的落点：重探成功后重新算 tools/list 并通知客户端。
+  // 这就是"装完 qmd → 面板点一下 → max_find_docs 立刻出现"的那条链路。
+  setToolsRefreshHook(() => void federated.refresh());
 
   // [graft-Max] tool names render as max_* under the Max build
   const nameFor = (n: string) => (isMax() ? inMax(n) : inBrand(n));
@@ -241,6 +254,9 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         return;
       case 'tools/list': {
         if (isNotification) return;
+        // [graft-Max P3-2] 用户手删全局提示词块后自动补回（函数内 60s 节流）。
+        // 这个函数此前只被 import、从未被调用 —— 死路径，现在接到真实入口。
+        if (process.env.GRAFT_MAX_MCP === '1') ensurePromptBlock();
         const local = repoTools();
         if (!paired) {
           // [graft-Max] federated sibling tools ride along, but ONLY when the
@@ -298,7 +314,7 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
           callFederatedTool(name, args, root).then(
             (r) => {
               dlogBlock(`<-- 工具返回（联邦）  ${name}  ${Date.now() - t0}ms  isError=${r?.isError}`, r?.text ?? 'unknown tool');
-              recordIcmTimeline(name, args, Date.now() - t0, !!r?.isError);
+              recordTimeline(name, args, Date.now() - t0, !!r?.isError);
               reply(id, r ? { content: [{ type: 'text', text: r.text }], isError: r.isError } : { content: [{ type: 'text', text: `unknown tool: ${name}` }], isError: true });
             },
             (err) => {
@@ -326,8 +342,8 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         const graftCallT0 = Date.now();
         callTool(root, name, args, dirOverride).then(
           (r) => {
-            dlogBlock(`<-- tools/call (graft)  ${name}  ${Date.now() - graftCallT0}ms  isError=${r.isError}`, r.text);
-            recordIcmTimeline(name, args, Date.now() - graftCallT0, r.isError);
+            dlogBlock(`<-- 工具返回（graft）  ${name}  ${Date.now() - graftCallT0}ms  isError=${r.isError}`, r.text);
+            recordTimeline(name, args, Date.now() - graftCallT0, r.isError);
             // No `hit`: `isError` means the tool failed, which is not the same
             // question as "did the graph have an answer". Absent beats wrong.
             // hasOwn for the same reason as track()'s: a client is free to send
@@ -339,7 +355,7 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
             reply(id, { content: [{ type: 'text', text: r.text }], isError: r.isError });
           },
           (err) => {
-            dlog(`<-- tools/call (graft)  ${name}  REJECTED: ${err instanceof Error ? err.message : String(err)}`);
+            dlog(`<-- 工具返回（graft）  ${name}  REJECTED: ${err instanceof Error ? err.message : String(err)}`);
             replyError(id, -32603, err instanceof Error ? err.message : String(err));
           },
         );
@@ -358,6 +374,9 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
       return;
     }
     dlog(`=== graft-Max MCP server exit === pid=${process.pid}`);
+    // [graft-Max N3] 会话退出时把未满批的 ICM 时序 flush 掉（硬上限 5s，绝不
+    // 拖住退出）。这是"批量写"不丢尾巴的那一半 —— 另一半是满 32 行/60s。
+    await flushTimelineOnExit();
     // [graft-Max T2/T3] tear down federated children (gitnexus session,
     // embedded qmd store) with the same lifecycle as the server itself.
     // Await before exit: qmd's sqlite close must land (R1, review max.7) or
@@ -385,6 +404,7 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         dlog(`=== graft-Max MCP server exit (stdin leash: silent 10min) === pid=${process.pid}`);
         // Await the teardown (qmd sqlite close), same as the stdin-end path.
         void (async () => {
+          await flushTimelineOnExit();
           try { await shutdownFederatedSessions(); } catch {/* exit must proceed */}
           endSession();
           process.exit(0);

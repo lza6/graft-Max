@@ -14,6 +14,14 @@
 #
 # REPO_DIR 默认 duck2api-hub（本机授权 E2E 实验仓库），可环境变量覆盖：
 #   REPO_DIR=D:\some\repo docker compose -f docker-compose.max.yml up -d
+#
+# 安全（N1，2026-11）：面板在容器里绑 0.0.0.0，是一个网络面，所以
+#   1) 宿主端口只发布到回环 127.0.0.1:24688（不是 0.0.0.0），远程访问请自行
+#      加 SSH 隧道（ssh -L 24688:127.0.0.1:24688 <host>）或反代 + TLS；
+#   2) 绑非回环地址时面板**强制**令牌：启动后在 `docker compose logs` 里找
+#      `dashboard: http://…/?token=…` 那一条，点开一次即种下 HttpOnly Cookie；
+#   3) healthcheck 打无鉴权、无数据的 /healthz（数据端点都要令牌）。
+#   想固定令牌就导出 GRAFT_MAX_UI_TOKEN=<长随机串> 再 up，留空则每次启动重新生成。
 services:
   max:
     build:
@@ -36,11 +44,16 @@ services:
       # 常驻 dashboard 容器没有 MCP 宿主 stdin：关掉 leash，否则 10 分钟自退
       GRAFT_MAX_LEASH: "0"
       GRAFT_MAX_UI_HOST: "0.0.0.0"
+      # 留空 = 绑 0.0.0.0 时自动生成随机令牌（打印在 stderr / docker logs）；
+      # 设成固定长串 = 每次重启令牌不变（远程书签更方便）
+      GRAFT_MAX_UI_TOKEN: ${GRAFT_MAX_UI_TOKEN:-}
+    # 宿主只绑回环：同网段的机器打不进来（旧写法 "24688:24688" = 所有网卡）
     ports:
-      - "24688:24688"
-    # dashboard 是这条服务的外部可见面，健康检查打它（stdio 模式不用 compose，无需此检查）
+      - "127.0.0.1:24688:24688"
+    # dashboard 是这条服务的外部可见面，健康检查打它（stdio 模式不用 compose，无需此检查）。
+    # /healthz 是无鉴权且不返回任何数据的探活端点——数据端点在此形态下都需要令牌。
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:24688/stats').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:24688/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       start_period: 20s

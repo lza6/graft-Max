@@ -28,7 +28,9 @@ send({ jsonrpc: '2.0', method: 'notifications/initialized' });
 await new Promise(r => setTimeout(r, 1500));
 try {
   const s = await getJson('/sessions');
-  check('P1 session registered before any call', s.length === 1 && s[0].requests === 0, `pid=${s[0]?.pid} requests=${s[0]?.requests}`);
+  // 这台机器上可能同时有别的会话（多容器/多编辑器）——只认**自己**这一行（host+pid）
+  const mine = s.find((r) => r.pid === c.pid);
+  check('P1 session registered before any call', !!mine && mine.requests === 0, `pid=${mine?.pid} requests=${mine?.requests} (总会话 ${s.length})`);
   const st = await getJson('/stats');
   check('P1 stats endpoint live', typeof st.logBytes === 'number' && st.logBytes > 0, `${st.logBytes} bytes`);
 } catch (e) { check('P1 dashboard reachable', false, e.message); }
@@ -43,12 +45,15 @@ setTimeout(() => send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { n
 await new Promise(r => setTimeout(r, 6000));
 try {
   const s = await getJson('/sessions');
-  check('P3 request count grew to >=3 (tools/call only; tools/list not counted)', s.length === 1 && s[0].requests >= 3, `requests=${s[0]?.requests}`);
+  const mine = s.find((r) => r.pid === c.pid);
+  check('P3 request count grew to >=3 (tools/call only; tools/list not counted)', mine?.requests >= 3, `requests=${mine?.requests}`);
   const tail = await getText('/tail?n=60');
   check('P3 log shows max_find_docs call', tail.includes('max_find_docs'), '');
   check('P3 log shows max_trace_arch call', tail.includes('max_trace_arch'), '');
-  check('P3 log shows qmd child spawn', tail.includes('[联邦] qmd 子进程启动'), '');
-  check('P3 log shows gitnexus child spawn', tail.includes('[联邦] gitnexus 子进程启动'), '');
+  // qmd 有两条真实路径：进程内 SDK（默认，2-5ms）与 spawn 降级。断言"其中一条真的跑了"，
+  // 而不是钉死在某一条上——T2 之后默认路径就是内嵌，钉死 spawn 等于永远失败。
+  check('P3 log shows qmd backend really exercised', tail.includes('进程内文档库就绪') || tail.includes('[联邦] qmd 子进程启动'), '');
+  check('P3 log shows gitnexus backend really exercised', tail.includes('gitnexus 常驻会话就绪') || tail.includes('[联邦] gitnexus 子进程启动') || tail.includes('gitnexus session ready'), '');
   const st = await getJson('/stats');
   check('P3 stats requests match', st.requests >= 3, `stats.requests=${st.requests}`);
 } catch (e) { check('P3 dashboard reflects activity', false, e.message); }

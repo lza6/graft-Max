@@ -17,6 +17,50 @@ function rec(name, ok, detail, ms) {
   console.log(`${ok ? '✅ PASS' : '❌ FAIL'}  ${name}${ms !== undefined ? `  ${ms}ms` : ''}  — ${detail}`);
 }
 
+/**
+ * [P3-18] Shape check for max_find_docs output, replacing the old "any text
+ * counts" assertion that let a broken embedded path pass as long as it did not
+ * throw. The contract is src/mcp/fed-qmd.ts formatResults(), which mirrors the
+ * qmd CLI byte for byte:
+ *
+ *   qmd://<collection>/<path>:<line> #<docid>   ← :line only when a query term
+ *                                                 survived into the snippet
+ *   Title: …   (optional) / Context: … (optional)
+ *   Score:   0%                                 ← 3-wide percentage
+ *   (blank)  then the "@@ -1,3 @@ (0 before, 24 after)" snippet hunk
+ *
+ * Two blank lines separate hits. A clean "No results found." (the CLI's own
+ * sentence) is a pass — an empty index is legitimate. isError is never a pass.
+ */
+const EMPTY_TEXT = 'No results found.';
+const HIT_LINE = /^qmd:\/\/\S+(:\d+)? #\S+$/;
+const SCORE_LINE = /^Score: +\d+%$/;
+function checkQmdText(text, isError) {
+  if (isError) return { ok: false, detail: `isError=true: ${text.slice(0, 120).replaceAll('\n', ' | ')}` };
+  const t = text.trim();
+  if (t === EMPTY_TEXT) return { ok: true, detail: 'clean no hits (CLI sentence)' };
+  const headers = [];
+  const blocks = [];
+  let cur = null;
+  for (const line of t.split('\n')) {
+    if (line.startsWith('qmd://')) {
+      cur = { header: line, body: [] };
+      blocks.push(cur);
+      headers.push(line);
+    } else if (cur) {
+      cur.body.push(line);
+    } else {
+      return { ok: false, detail: `output starts with something else: ${line.slice(0, 80)}` };
+    }
+  }
+  if (headers.length === 0) return { ok: false, detail: `not "${EMPTY_TEXT}" and no qmd:// hit: ${t.slice(0, 100)}` };
+  const bad = headers.filter((h) => !HIT_LINE.test(h));
+  if (bad.length) return { ok: false, detail: `malformed hit line: ${bad.slice(0, 2).join(' | ')}` };
+  const noScore = blocks.find((b) => !b.body.some((l) => SCORE_LINE.test(l)));
+  if (noScore) return { ok: false, detail: `hit block without a Score line: ${noScore.header}` };
+  return { ok: true, detail: `${headers.length} hit(s), first: ${headers[0]}` };
+}
+
 const child = spawn(process.execPath, [SERVER, 'mcp'], { cwd: ROOT, windowsHide: true });
 child.stderr.on('data', () => {});
 const pending = new Map();
@@ -60,9 +104,18 @@ const q1t = Date.now();
 r = await rpc('tools/call', { name: 'max_find_docs', arguments: { query: 'E2E hub', limit: 3 } });
 const q1ms = Date.now() - q1t;
 const q1text = r.result?.content?.[0]?.text ?? '';
-rec('T2 qmd search works', !r.result?.isError, `text: ${q1text.slice(0, 90).replaceAll('\n', ' | ')}`, q1ms);
-// note: the CLI db indexes the user's collections, not ROOT — hits or clean
-// "no hits" are both fine; a crash/isError is not.
+// [P3-18] the CLI db indexes the user's collections, not ROOT, so "no hits" is
+// a legitimate answer — but it has to be the CLI's own empty sentence, and any
+// hit has to be a well-formed qmd:// block. isError fails the case.
+const q1 = checkQmdText(q1text, r.result?.isError);
+rec('T2 qmd search works', q1.ok, q1.detail, q1ms);
+
+// --- T2b: the embedded path must print the CLI's block shape when it *does*
+// hit (P1-4: "9/9 PASS" used to say nothing about the hit format).
+const q2t = Date.now();
+r = await rpc('tools/call', { name: 'max_find_docs', arguments: { query: 'graft', limit: 3 } });
+const q2 = checkQmdText(r.result?.content?.[0]?.text ?? '', r.result?.isError);
+rec('T2b qmd hit shape (qmd:// … #docid + Score)', q2.ok, q2.detail, Date.now() - q2t);
 
 // --- T4: cache — same args twice, 2nd must be [cached] and fast
 const c1t = Date.now();

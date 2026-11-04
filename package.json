@@ -1,6 +1,6 @@
 {
   "name": "graft-max",
-  "version": "0.28.0-max.9",
+  "version": "0.28.0-max.10",
   "description": "[graft-Max] Self-developed fork of graft (nanonets/graft v0.28.0) - repo context graph + planned unified MCP aggregation for our toolchain.",
   "keywords": [
     "ai",
@@ -45,10 +45,12 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p viewer/tsconfig.json && node scripts/build-viewer.mjs && node scripts/vendor-grammars.mjs",
+    "build": "tsc -p tsconfig.json && tsc -p viewer/tsconfig.json && tsc -p panel/tsconfig.json && node scripts/build-viewer.mjs && node scripts/build-panel.mjs && node scripts/vendor-grammars.mjs",
+    "build:panel": "tsc -p panel/tsconfig.json && node scripts/build-panel.mjs",
     "dev": "tsc -p tsconfig.json --watch",
     "cli": "tsx src/cli.ts",
     "test": "node scripts/run-tests.mjs",
+    "hooks:install": "node scripts/install-hooks.mjs",
     "prepare": "npm run build && node scripts/stamp-telemetry-key.mjs",
     "prepublishOnly": "npm run build",
     "postinstall": "node scripts/postinstall.mjs"

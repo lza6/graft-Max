@@ -40,7 +40,11 @@ setTimeout(async () => {
     const tail = (await fetchLocal('http://127.0.0.1:24688/tail?n=50')).body;
     check('/tail has timestamped lines', tail.split('\n').some((l) => /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(l)), tail.split('\n').find((l) => /^\[/.test(l))?.slice(0, 90));
     const page = (await fetchLocal('http://127.0.0.1:24688/')).body;
-    check('/ HTML page (new design)', page.includes('graft-Max Dashboard') && page.includes('toggleTheme') && page.includes('活跃会话'), `${page.length} bytes`);
+    // [N8] 面板已拆成真前端工程：HTML 里只有外链 app.js，主题/刷新逻辑在 JS bundle 里。
+    // 断言同时覆盖 HTML 与 JS 两份产物，比只看内联 HTML 更强（少一个 404 就能发现）。
+    const appJs = (await fetchLocal('http://127.0.0.1:24688/app.js')).body;
+    check('/ HTML page (new design)', page.includes('graft-Max Dashboard') && page.includes('活跃会话') && page.includes('app.js'), `${page.length} bytes`);
+    check('/app.js bundle served', appJs.length > 5000 && appJs.includes('toggleTheme') && appJs.includes('/reprobe'), `${appJs.length} bytes`);
   } catch (e) {
     check('dashboard reachable', false, e.message);
   }

@@ -6,14 +6,23 @@
  * `mcpTargets()` is the pure "which files would this touch" half, so `graft
  * init --dry-run` and the picker can report paths without writing;
  * `registerMcpConfigs()` walks that same list to do the writing.
+ *
+ * [graft-Max][N2] The two whole-file writes below go through `atomicWriteSync`
+ * (same-directory tmp + rename, `.bak` rotation). For the JSON host that means
+ * `~/.claude.json` / `.mcp.json`-class files, which the host's own process may be
+ * rewriting at the same moment — project constraint §8 records a plain overwrite
+ * truncating it 246KB→852B. The JSON write also parses its payload first
+ * (`validateJson`), so malformed content never reaches the disk; the TOML write is
+ * text, so it gets tmp+rename and a backup but no JSON check.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import type { PlannedWrite } from './plan.js';
 import { readJsonObject, type ConfigWrite } from './config-write.js';
+import { atomicWriteSync } from '../util/atomic-write.js';
 import { trailOnPath, type Brand } from '../brand.js';
 
 /** MCP registration reports the same write-result record every installer does. */
@@ -119,8 +128,7 @@ export function mergeJsonKey(id: string, path: string, topKey: string, entry: ob
   const action = existed ? 'updated' : 'created';
   for (const k of dropping) delete bucket[k];
   bucket[key] = entry;
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(root, null, 2)}\n`);
+  atomicWriteSync(path, `${JSON.stringify(root, null, 2)}\n`, { backup: true, validateJson: true });
   return { id, path, action };
 }
 
@@ -174,8 +182,7 @@ export function upsertCodexToml(id: string, path: string, name: Brand = 'graft')
   // Byte-identical already: don't rewrite the file just to reorder it.
   if (found && text === appendSection(rest, section)) return { id, path, action: 'unchanged' };
 
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, appendSection(rest, section));
+  atomicWriteSync(path, appendSection(rest, section), { backup: true });
   return { id, path, action: existed ? 'updated' : 'created' };
 }
 

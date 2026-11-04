@@ -94,28 +94,43 @@ await new Promise((resolve) => {
 {
   const name = 'graft-max-e2e';
   sh('docker', ['rm', '-f', name]);
-  const r = spawn('docker', ['run', '-d', '--name', name, '-p', '24799:24799', '-e', 'GRAFT_MAX_UI=24799', '-e', 'GRAFT_MAX_LOG=1', '-e', 'GRAFT_MAX_LEASH=0', '-v', `${REPO}:/workspace`, IMAGE, 'mcp', '/workspace'], { windowsHide: true });
+  // [N1] 宿主侧端口只发布到回环（与 docker-compose.max.yml 同一纪律）：
+  // `-p 24799:24799` 会绑所有网卡，等于把开发日志面板暴露到整个网段。
+  const r = spawn('docker', ['run', '-d', '--name', name, '-p', '127.0.0.1:24799:24799', '-e', 'GRAFT_MAX_UI=24799', '-e', 'GRAFT_MAX_LOG=1', '-e', 'GRAFT_MAX_LEASH=0', '-v', `${REPO}:/workspace`, IMAGE, 'mcp', '/workspace'], { windowsHide: true });
   await new Promise((res) => r.on('close', res));
   // 等 dashboard 起来（最多 60s；容器内首次建图可能慢，但 /stats 不等建图）
   let ready = false;
   for (let i = 0; i < 30 && !ready; i++) {
-    try { const t = await fetch('http://127.0.0.1:24799/stats'); ready = t.ok; } catch { /* not yet */ }
+    try { const t = await fetch('http://127.0.0.1:24799/healthz'); ready = t.ok; } catch { /* not yet */ }
     if (!ready) await new Promise((res) => setTimeout(res, 2000));
   }
   const up = sh('docker', ['inspect', '-f', '{{.State.Running}}', name]).stdout?.trim();
-  rec('D6 常驻模式存活（leash 关闭）', up === 'true', `State.Running=${up} dashboardReady=${ready}`);
+  rec('D6 常驻模式存活（leash 关闭）', up === 'true', `State.Running=${up} healthzReady=${ready}`);
+
+  // [N1] 容器形态 = 非回环绑定 = 强制令牌。令牌只在 stderr 打一次（不进 mcp.log）。
+  const logsForToken = sh('docker', ['logs', '--tail', '60', name]);
+  const tokenLog = `${logsForToken.stdout ?? ''}${logsForToken.stderr ?? ''}`;
+  const tokM = /dashboard: http:\/\/[^\s]+\?token=([0-9a-f]+)/.exec(tokenLog);
+  const TOKEN = tokM?.[1] ?? '';
+  rec('D4a 容器形态强制令牌（stderr 带 ?token= 的 URL）', TOKEN.length >= 16, `token=${TOKEN ? TOKEN.slice(0, 6) + '…' : '(none)'}`);
 
   let stats = null;
   let storage = null;
   try {
-    const rs = await fetch('http://127.0.0.1:24799/stats');
-    stats = await rs.json();
-    const rt = await fetch('http://127.0.0.1:24799/storage');
-    storage = await rt.json();
+    const noAuth = await fetch('http://127.0.0.1:24799/stats');
+    rec('D4b 无令牌打数据端点 → 401', noAuth.status === 401, `status=${noAuth.status}`);
+    const hz = await fetch('http://127.0.0.1:24799/healthz');
+    rec('D4c /healthz 无鉴权 → 200（容器 healthcheck 依赖它）', hz.status === 200, `status=${hz.status}`);
+    const q = TOKEN ? `?token=${TOKEN}` : '';
+    const rs = await fetch(`http://127.0.0.1:24799/stats${q}`);
+    stats = rs.ok ? await rs.json() : null;
+    const rt = await fetch(`http://127.0.0.1:24799/storage${q}`);
+    storage = rt.ok ? await rt.json() : null;
+    rec('D4d 带令牌 /stats → 200', rs.status === 200, `status=${rs.status}`);
   } catch (e) {
     rec('D4 dashboard 端口', false, String(e.message).slice(0, 100));
   }
-  if (stats) rec('D4 /stats 真实响应', typeof stats.requests === 'number', `requests=${stats.requests} toolStats=${Object.keys(stats.toolStats ?? {}).length}`);
+  if (stats) rec('D4 /stats 真实响应', typeof stats.requests === 'number', `requests=${stats.requests} toolStats=${Object.keys(stats.toolStats ?? {}).length} fedHealth=${(stats.fedHealth ?? []).length}`);
   if (storage) rec('D4 /storage 真实响应', Array.isArray(storage.entries) && storage.entries.length >= 5, `${storage.entries?.length} 条产物`);
 
   // docker logs 把容器 stdout/stderr 分流到本进程的两个管道，合并看
@@ -123,8 +138,8 @@ await new Promise((resolve) => {
   const logs = `${logsOut.stdout ?? ''}${logsOut.stderr ?? ''}`;
   // boot 行走日志文件（~/.graft-max/mcp.log），面板地址行走 stderr；两处都验
   const logFile = sh('docker', ['exec', name, 'sh', '-c', 'cat /home/node/.graft-max/mcp.log 2>/dev/null | head -40']).stdout ?? '';
-  rec('D4 容器日志有 boot 行',
-      /dashboard: http:\/\//.test(logs) && /graft-Max MCP/.test(logFile),
+  rec('D4 容器日志有 boot 行 + 令牌不落 mcp.log',
+      /dashboard: http:\/\//.test(logs) && /graft-Max MCP/.test(logFile) && !logFile.includes('?token='),
       `stderr="${logs.split('\n').filter(Boolean)[0]?.slice(0, 50) ?? ''}" logfile="${logFile.split('\n').filter((l) => /graft-Max MCP/.test(l))[0]?.slice(0, 60) ?? ''}"`);
   sh('docker', ['rm', '-f', name]);
 }

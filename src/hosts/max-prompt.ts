@@ -7,10 +7,16 @@
  * - 用户内容永不触碰：只动标记之间的区域；没有标记就插到文件最前
  * - 追加条件：GRAFT_MAX_MCP=1（只有 Max 被启用时才注入），开关关掉时
  *   removeGlobalPrompt() 把块整个摘除——这就是"一键切换"的提示词半边。
+ *
+ * [graft-Max][N2] 落盘走 atomicWriteSync：这是**用户全局**文件（可能几千行个人
+ * 规则），直接 writeFileSync 的「先截断后写」在进程被杀/磁盘满时会把文件写残——
+ * 与 `~/.claude.json` 246KB→852B 事故同源（docs-selfdev/项目约束.md §8）。现在每次
+ * 写都是同目录 tmp + rename 原子替换，并留一份 .bak（最多 3 代）。
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { atomicWriteSync } from '../util/atomic-write.js';
 
 export const MAX_PROMPT_START = '<!-- graft-max:start -->';
 export const MAX_PROMPT_END = '<!-- graft-max:end -->';
@@ -42,8 +48,8 @@ export function upsertGlobalPrompt(home: string = homedir()): 'created' | 'updat
   const path = globalClaudeMdPath(home);
   const block = maxGlobalPrompt();
   if (!existsSync(path)) {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, block + '\n\n', 'utf8');
+    // atomicWriteSync 自己会 mkdir -p(dirname)，这里不再单独 mkdir。
+    atomicWriteSync(path, block + '\n\n', { backup: true });
     return 'created';
   }
   const raw = readFileSync(path, 'utf8');
@@ -52,11 +58,11 @@ export function upsertGlobalPrompt(home: string = homedir()): 'created' | 'updat
   if (s !== -1 && e !== -1) {
     const current = raw.slice(s, e + MAX_PROMPT_END.length);
     if (current === block) return 'unchanged';
-    writeFileSync(path, raw.slice(0, s) + block + raw.slice(e + MAX_PROMPT_END.length), 'utf8');
+    atomicWriteSync(path, raw.slice(0, s) + block + raw.slice(e + MAX_PROMPT_END.length), { backup: true });
     return 'updated';
   }
   // 没有块：插到最前（"追加到全局提示词前面"）
-  writeFileSync(path, block + '\n\n' + raw, 'utf8');
+  atomicWriteSync(path, block + '\n\n' + raw, { backup: true });
   return 'created';
 }
 
@@ -85,6 +91,6 @@ export function removeGlobalPrompt(home: string = homedir()): boolean {
   if (s === -1 || e === -1) return false;
   let out = raw.slice(0, s) + raw.slice(e + MAX_PROMPT_END.length);
   out = out.replace(/^\n+/, ''); // 头部空行清干净
-  writeFileSync(path, out, 'utf8');
+  atomicWriteSync(path, out, { backup: true });
   return true;
 }

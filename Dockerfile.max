@@ -19,6 +19,12 @@
 #
 # 联邦后端按仓库可选；未装时 probe 门控自动隐藏对应工具（零 schema 占用），
 # graft_*/max_* 六件套始终可用。运行身份 node（非 root）。
+#
+# 安全（N1，2026-11）：面板默认只绑 127.0.0.1；容器形态必须绑 0.0.0.0 才能被
+#   -p 端口映射打到，于是面板在**非回环绑定**下强制令牌鉴权（未给
+#   GRAFT_MAX_UI_TOKEN 就随机生成，完整带令牌 URL 只打到 stderr → docker logs），
+#   并校验 Host 头（挡 DNS rebinding）、带 nosniff/CSP 等安全响应头。
+#   宿主侧请用 compose 的 "127.0.0.1:24688:24688"，远程访问走 SSH 隧道或反代。
 # =====================================================================
 
 # ---- 构建阶段 ----
@@ -79,7 +85,9 @@ ENV GRAFT_MAX_UI=24688
 ENV GRAFT_MAX_LOG=1
 # stdio 交互式会话保留 leash（宿主崩溃自愈）；常驻容器由 compose 设 GRAFT_MAX_LEASH=0
 ENV GRAFT_MAX_LEASH=1
-# 容器内必须绑 0.0.0.0，否则 -p 端口映射到不了（docker DNAT 打容器 eth0）
+# 容器内必须绑 0.0.0.0，否则 -p 端口映射到不了（docker DNAT 打容器 eth0）。
+# 注意：非回环绑定会让面板强制启用令牌鉴权（见文件头"安全"段落）——
+# 令牌 URL 在容器 stderr 里，`docker compose logs max` 可读。
 ENV GRAFT_MAX_UI_HOST=0.0.0.0
 
 # 运行时要写的两个目录必须在镜像里就存在且属于 node：

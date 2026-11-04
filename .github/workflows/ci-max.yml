@@ -1,0 +1,86 @@
+name: CI (graft-Max gate)
+
+# [graft-Max N16] Max 专属门禁。为什么单开一个 workflow 而不是改 ci.yml：
+# ci.yml 是上游文件（每次同步都撞车），而我们这条 gate 的语义是"Max 形态必须能
+# 构建、能起 MCP、能跑通一条真 E2E"，跟上游的"跑全量单测"是两件事。
+#
+# 这里**故意不依赖** qmd / gitnexus / ccc 任何外部后端，也不起浏览器：
+#   - 断言 MCP stdio 全链路（initialize → tools/list → 建图 → 图查询 → 落盘 → 退出）
+#   - 断言 dist 产物版本号是 -max.N
+# 外部后端的 E2E（e2e-federation / e2e-docker / ui-interact）只能在开发机跑，
+# 它们硬编码了本机仓库路径与真实后端，见 e2e/E2E-REPORT.md 的"环境要求"。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-max-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  max-gate:
+    name: max gate (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      # 原生的 tree-sitter 语法在 Windows 上要编 C++（node-gyp 版本钉住的理由见 ci.yml）。
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Version gate (must be 0.28.0-max.N)
+        shell: bash
+        run: |
+          set -euo pipefail
+          v=$(node dist/cli.js --version)
+          echo "version=$v"
+          case "$v" in
+            0.28.0-max.*) ;;
+            *) echo "::error::版本号不是 0.28.0-max.N，实际: $v"; exit 1 ;;
+          esac
+
+      - name: Packaging completeness (dist 里该有的都在)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in dist/cli.js dist/mcp/dashboard.js dist/graph/queries dist/vendor/grammars; do
+            test -e "$p" || { echo "::error::missing $p"; exit 1; }
+          done
+          echo "dist layout ok"
+
+      # 真 E2E：不依赖外部后端，24 条断言（MCP 全链路 + 落盘证据 + 干净退出）
+      - name: E2E smoke (real MCP stdio, temp repo)
+        run: node e2e/e2e-ci-smoke.mjs
+
+      # 全量单测在 ci.yml 里已经对两个 OS 都跑过；这里只在 Linux 上复跑一遍，
+      # 保证"Max 改动没有把上游测试打红"这条结论在本 workflow 里也自证一次。
+      - name: Unit tests (ubuntu only)
+        if: runner.os == 'Linux'
+        run: npm test

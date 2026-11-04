@@ -112,8 +112,9 @@ const I18N: Array<[RegExp, string]> = [
   [/^dashboard: port (\d+) busy — UI not started \(MCP unaffected\)$/, '面板端口 $1 被占用 — UI 未启动（MCP 不受影响）'],
   [/^log rotated at (\d+) bytes/, '日志已滚动（超过5MB）: $1 字节'],
   [/^--> tools\/call  id=(\S+)  name=(\S+)$/, '--> 工具调用  请求id=$1  工具=$2'],
-  [/^<-- tools\/call \(federated\)/, '<-- 工具返回（联邦）'],
-  [/^<-- tools\/call \(graft\)/, '<-- 工具返回（graft）'],
+  // [P3-3] 已删除两条死规则（`<-- tools/call (federated)` / `<-- tools/call (graft)`）：
+  // server.ts 早就在 dlog 里直接输出中文（`<-- 工具返回（联邦）…`），这两条正则永远匹配不到，
+  // 留着只会让后来者误以为英文日志还会走这里。真实行→替换行为的断言见 test/devlog-i18n.test.ts。
   [/^<-- tools\/list  id=(\S+)  ->  $/, '<-- 工具列表返回  id=$1 ->（空，仓库未建图）'],
   [/^<-- tools\/list  id=(\S+)  ->  /, '<-- 工具列表返回  id=$1 -> '],
   [/^<-- (\S+)  id=(\S+) \(notification\)$/, '<-- 收到 $1  id=$2（通知）'],
@@ -122,6 +123,9 @@ const I18N: Array<[RegExp, string]> = [
   [/^\[fed\] qmd done ok=(\S+) out="(.*)" err="(.*)"$/, '[联邦] qmd 完成 成功=$1 输出="$2" 错误="$3"'],
   [/^\[fed\] gitnexus spawn \(cwd=(.*)\) query="(.*)"$/, '[联邦] gitnexus 子进程启动（仓库=$1）查询="$2"'],
   [/^\[fed\] gitnexus session: /, '[联邦] gitnexus 会话分步: '],
+  // [P3-3 续] 这两条是"快路径真的生效了"的证据行，之前一直是英文，日志读起来两套语言。
+  [/^\[fed-qmd\] in-process store ready \((.*)\) in (\d+)ms$/, '[联邦-qmd] 进程内文档库就绪（$1）耗时 $2ms'],
+  [/^\[fed\] gitnexus session ready in (\d+)ms$/, '[联邦] gitnexus 常驻会话就绪 $1ms'],
   [/^\[fed\] gitnexus answered /, '[联邦] gitnexus 返回 '],
 ];
 function i18n(line: string): string {
@@ -137,7 +141,11 @@ export function dlog(msg: string): void {
 
 export function dlogBlock(title: string, body: string): void {
   if (!enabled) return;
-  void write(`[${stamp()}] ${title}\n${clip(body)}\n`);
+  // [P3-3 根因] 这里**必须**走 i18n(title)：历史上 dlogBlock 只拼字符串、从不翻译，
+  // 于是 `--> tools/call …` / `<-- tools/call (graft) …` 这些标题永远是英文，
+  // 而对应的 I18N 规则看起来"永远匹配不上"，被误判成死代码删掉。
+  // body 是工具原始输出，**不翻译**（翻译代码片段会毁掉可读性与可复制性）。
+  void write(`[${stamp()}] ${i18n(title)}\n${clip(body)}\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,6 +180,51 @@ function myHost(): string {
 const myselfId = (): string => myHost() + ':' + process.pid;
 /** 跨容器判活窗口：别的 host 的会话拿不到它的 pid，只能靠 lastSeen 新鲜度。 */
 const REMOTE_STALE_MS = 3 * 60_000;
+/** 已结束行保留时长与条数上限（保留一点历史便于排查，但不能无限长）。 */
+const ENDED_RETAIN_MS = 60 * 60_000;
+const ENDED_KEEP_MAX = 20;
+/** 请求计数的落盘节流窗口（P1-5/P3-13：不要每次工具调用都同步读改写）。 */
+const BUMP_THROTTLE_MS = 2_000;
+
+/**
+ * [P1-5] 本会话的行：身份是 **host + pid**，不是裸 pid。
+ * 容器里每个进程都是 pid 1 —— 只按 pid 找会串行改到别的容器的行
+ * （A 的调用给 B 的行 +1、A 退出把 B 标成 ended）。touchSession/liveSessions
+ * 早已改成 host+pid，这里是剩下两处（bumpRequests/endSession）的封口。
+ */
+function myRow(rows: SessionRow[]): SessionRow | undefined {
+  const me = myHost();
+  return rows.find((r) => (r.host ?? me) === me && r.pid === process.pid);
+}
+
+/** 清理死行：同 host 用 pid 探活，跨 host 用 lastSeen 新鲜度；ended 行按时间/条数截断。 */
+function pruneDeadRows(rows: SessionRow[]): SessionRow[] {
+  const me = myHost();
+  const now = Date.now();
+  const kept: SessionRow[] = [];
+  for (const r of rows) {
+    const sameHost = (r.host ?? me) === me;
+    if (sameHost && r.pid === process.pid) {
+      kept.push(r); // 自己永远保留（哪怕窗口刚过期，也由 touchSession 刷新）
+      continue;
+    }
+    if (r.endedAt) {
+      const t = Date.parse(r.endedAt);
+      if (Number.isFinite(t) && now - t < ENDED_RETAIN_MS) kept.push(r);
+      continue;
+    }
+    if (sameHost) {
+      if (alive(r.pid)) kept.push(r);
+      continue;
+    }
+    const t = Date.parse(r.lastSeen ?? r.startedAt ?? '');
+    if (Number.isFinite(t) && now - t < REMOTE_STALE_MS) kept.push(r);
+  }
+  const ended = kept.filter((r) => r.endedAt).sort((a, b) => Date.parse(b.endedAt as string) - Date.parse(a.endedAt as string));
+  if (ended.length <= ENDED_KEEP_MAX) return kept;
+  const drop = new Set(ended.slice(ENDED_KEEP_MAX));
+  return kept.filter((r) => !drop.has(r));
+}
 
 let lastTouch = 0;
 let registeredRoot: string | null = null;
@@ -213,10 +266,13 @@ function readSessions(): SessionRow[] {
 
 function writeSessions(rows: SessionRow[]): void {
   try {
+    // [P3-5] 自净挪到**写路径**：读路径（liveSessions）只过滤不落盘，否则面板每 2s
+    // 轮询都会触发一次写，把只读接口变成写接口。
     // [graft-Max] 同步原子写：多 server 并发 bump 时，async writeFile 交错会把
     // 文件截成 0 字节（实测发生过）。writeFileSync + 同目录 tmp + rename 原子替换。
+    const clean = pruneDeadRows(rows);
     const tmp = SESSIONS_FILE + '.tmp';
-    writeFileSync(tmp, JSON.stringify(rows, null, 1), 'utf8');
+    writeFileSync(tmp, JSON.stringify(clean, null, 1), 'utf8');
     renameSync(tmp, SESSIONS_FILE);
   } catch {
     /* best effort */
@@ -256,7 +312,8 @@ export function registerSession(root: string, version: string): void {
       lastSeen: new Date().toISOString(),
     });
     mkdirSync(GRAFT_MAX_HOME, { recursive: true });
-    writeFileSync(SESSIONS_FILE, JSON.stringify(rows, null, 1), 'utf8');
+    // [N4] 与其它写路径统一：原子替换 + 顺带自净死行。
+    writeSessions(rows);
     dlog(`session registered: pid=${process.pid} host=${process.ppid} root=${root} version=${version}`);
   } catch {
     /* registry is best-effort */
@@ -271,25 +328,51 @@ function shortHostCmd(): string {
   }
 }
 
-/** Count one served request against this session (dashboard activity). */
+// ---------------------------------------------------------------------------
+// [N4] 请求计数：内存累加 + 2s 节流落盘
+//
+// 原实现每次 tools/call 都 `readSessions()` + `writeFileSync()`（实测 1.08ms/轮），
+// 在热路径上做无界同步 IO（项目约束 C3 禁止）。现在计数先进内存，最多每 2s
+// 落盘一次；`flushPendingBumps()` 在会话结束/退出时兜底，保证尾巴不丢。
+// ---------------------------------------------------------------------------
+let pendingBumps = 0;
+let bumpTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Count one served request against this session (dashboard activity) — buffered. */
 export function bumpRequests(): void {
+  pendingBumps += 1;
+  if (bumpTimer) return;
+  bumpTimer = setTimeout(() => {
+    bumpTimer = null;
+    flushPendingBumps();
+  }, BUMP_THROTTLE_MS);
+  // 不因这个定时器阻止进程退出（真退出路径会显式 flush）
+  (bumpTimer as unknown as { unref?: () => void }).unref?.();
+}
+
+/** 把内存里积攒的请求数写进本会话那一行（host+pid 定位）。返回是否真的写了盘。 */
+export function flushPendingBumps(): boolean {
+  if (pendingBumps === 0) return false;
+  const n = pendingBumps;
+  pendingBumps = 0;
   try {
     const rows = readSessions();
-    const me = rows.find((r) => r.pid === process.pid);
-    if (me) {
-      me.requests += 1;
-      writeSessions(rows);
-    }
+    const me = myRow(rows);
+    if (!me) return false;
+    me.requests += n;
+    writeSessions(rows);
+    return true;
   } catch {
-    /* best effort */
+    return false;
   }
 }
 
 /** Mark this instance ended. Called on stdin close. */
 export function endSession(): void {
   try {
+    flushPendingBumps(); // 先把尾巴的请求数落下来，再标结束
     const rows = readSessions();
-    const me = rows.find((r) => r.pid === process.pid);
+    const me = myRow(rows);
     if (me) {
       me.endedAt = new Date().toISOString();
       writeSessions(rows);
@@ -299,7 +382,8 @@ export function endSession(): void {
   }
 }
 
-/** Live sessions for the dashboard: ended rows dropped, dead pids pruned. */
+/** Live sessions for the dashboard: ended rows dropped, dead pids pruned.
+ * [P3-5] 纯读：过滤在内存里做，落盘自净交给写路径（writeSessions → pruneDeadRows）。 */
 export function liveSessions(): SessionRow[] {
   const rows = readSessions();
   const me = myHost();
@@ -312,8 +396,5 @@ export function liveSessions(): SessionRow[] {
     const t = Date.parse(r.lastSeen ?? r.startedAt ?? '');
     return Number.isFinite(t) && now - t < REMOTE_STALE_MS;
   };
-  const live = rows.filter(isLive);
-  // prune everything not live, write back only when something actually went away
-  if (live.length !== rows.length) writeSessions(live);
-  return live.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  return rows.filter(isLive).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 }

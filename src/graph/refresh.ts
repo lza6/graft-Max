@@ -38,7 +38,7 @@
  * waits a while for it (`buildMissingMap`).
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { contextDirFor } from "../context/node-file.js";
@@ -61,9 +61,11 @@ const LOCK_WAIT_MS = 2000;
 const LOCK_POLL_MS = 50;
 
 /** How long a query waits for a repo's first build before answering without code.
- * A big repo (8k files) builds in about 75s, and the agent's shell gives a command
- * two minutes; a reply with code in it on the first try is worth the wait, once. */
-const FIRST_BUILD_WAIT_MS = 90_000;
+ * [graft-Max N13] Upstream waited 90s — the agent's shell budget is 2 minutes, so a
+ * 90s wait plus the actual query left nothing and the user saw a black screen. We
+ * wait 20s (a small repo finishes inside it), and otherwise answer immediately with
+ * a note that says how to retry. Override: GRAFT_MAX_FIRST_BUILD_WAIT_MS. */
+const FIRST_BUILD_WAIT_MS = 20_000;
 const FIRST_BUILD_POLL_MS = 250;
 /** The first build's own time limit, well past the end-of-turn rebuild's two minutes. */
 const FIRST_BUILD_TIMEOUT_MS = 10 * 60_000;
@@ -98,13 +100,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** The wait for a first build: the option, else `GRAFT_FIRST_BUILD_WAIT_MS` (the hooks
- * set 0, since their own budget is seconds), else the default. */
+/** The wait for a first build: the option, else `GRAFT_MAX_FIRST_BUILD_WAIT_MS`
+ * (Max-specific, N13), else `GRAFT_FIRST_BUILD_WAIT_MS` (upstream name, the hooks
+ * set 0 since their own budget is seconds), else the default. */
 function firstBuildWait(opts: RefreshOptions): number {
   if (opts.firstBuildWaitMs !== undefined) return opts.firstBuildWaitMs;
-  const v = process.env.GRAFT_FIRST_BUILD_WAIT_MS;
-  const ms = v === undefined || v === "" ? NaN : Number(v);
-  return Number.isFinite(ms) && ms >= 0 ? ms : FIRST_BUILD_WAIT_MS;
+  for (const key of ['GRAFT_MAX_FIRST_BUILD_WAIT_MS', 'GRAFT_FIRST_BUILD_WAIT_MS']) {
+    const v = process.env[key];
+    const ms = v === undefined || v === '' ? NaN : Number(v);
+    if (Number.isFinite(ms) && ms >= 0) return ms;
+  }
+  return FIRST_BUILD_WAIT_MS;
 }
 
 /**
@@ -152,27 +158,26 @@ async function buildMissingMap(dir: string, outDir: string, opts: RefreshOptions
   }
   const lockCache = join(outDir, CACHE_DIR);
   const started = Date.now();
-  // [graft-Max] 建图状态落盘，供 dashboard 显示"建图进行中"（否则用户看不见）
-  try {
-    const { writeFileSync: wfs, mkdirSync: mks } = await import('node:fs');
-    mks(join(outDir, '.graph'), { recursive: true });
-    wfs(join(outDir, '.graph', 'building.json'), JSON.stringify({ startedAt: new Date().toISOString(), pid: process.pid }), 'utf8');
-  } catch {/* best effort */}
   // The lock free and still no map: nobody is building it, so this query starts it.
   // Taken here, released by the child.
-  if (!lockHeldIn(lockCache) && acquireLockIn(lockCache) && !startFirstBuild(dir)) releaseLockIn(lockCache);
+  if (!lockHeldIn(lockCache) && acquireLockIn(lockCache) && !startFirstBuild(dir)) {
+    releaseLockIn(lockCache);
+    return { refreshed: false, note: `couldn't build this repo's code map — run \`${cmd("graft build")}\` to see why` };
+  }
+  // [graft-Max N13 / P3-9] building.json 的**写入与删除都归建图子进程**
+  // (claude/sync-run.ts)。这个等待者一行都不碰它 —— 上游版本在等待循环结束后
+  // 无条件 unlink，于是"建图还在跑、面板却显示建完了"，快节奏下多次首查还会互删。
   const deadline = started + firstBuildWait(opts);
   while (lockHeldIn(lockCache) && Date.now() < deadline) await sleep(FIRST_BUILD_POLL_MS);
-  // [graft-Max] 建图完成，清除状态文件
-  try { const { unlinkSync: ufs } = await import('node:fs'); ufs(join(outDir, '.graph', 'building.json')); } catch {}
   if (existsSync(wiringPath(outDir))) {
     invalidateGraphCaches(outDir);
     return `built this repo's code map for the first time (${Math.round((Date.now() - started) / 1000)}s)`;
   }
   if (lockHeldIn(lockCache)) {
+    const secs = Math.max(1, Math.round((Date.now() - started) / 1000));
     return {
       refreshed: false,
-      note: "no code map here yet: building one in the background (about a minute on a big repo). Until it's done, answers carry learnings but no code — run the same command again in a minute instead of rewording it",
+      note: `no code map here yet: building one in the background (still running after ${secs}s; a big repo takes about a minute). Answers until then carry learnings but no code — run the same query again in a minute instead of rewording it. The dashboard's KPI card shows the live build state.`,
     };
   }
   return { refreshed: false, note: `couldn't build this repo's code map — run \`${cmd("graft build")}\` to see why` };
@@ -404,4 +409,40 @@ export function refreshNote(r: RefreshResult): string | null {
   // count is the interesting half (it's the branch diff), the provenance explains
   // where a graph came from in a directory the user knows they never built.
   return r.note ? `${tag()} ${built} — ${r.note}` : `${tag()} ${built}`;
+}
+
+// ---------------------------------------------------------------------------
+// [graft-Max N13] 建图状态的**读取**接口。
+//
+// 写/删都归建图子进程（claude/sync-run.ts），这里只读 —— 面板 KPI 卡
+// ("建图中 · <repo>") 与工具返回的 note 共用这一份事实，避免两处各编一套。
+// ---------------------------------------------------------------------------
+
+export interface BuildingStatus {
+  /** 现在真的在建图（状态新鲜）。 */
+  building: boolean;
+  /** 仓库根（状态文件里记的那个，回退到调用方传的）。 */
+  root: string;
+  startedAt?: string;
+  elapsedMs?: number;
+  pid?: number;
+  /** 状态文件还在但已超过建图硬超时 + 60s → 视为陈旧（子进程被 kill 时不会自己清理）。 */
+  stale?: boolean;
+}
+
+/** 建图子进程的硬超时 + 1 分钟宽限；超过这个时间的 building.json 一定是残留。 */
+const BUILDING_STALE_MS = FIRST_BUILD_TIMEOUT_MS + 60_000;
+
+export function buildingStatus(root: string, contextDir?: string): BuildingStatus {
+  const marker = join(contextDirFor(root, contextDir), '.graph', 'building.json');
+  try {
+    if (!existsSync(marker)) return { building: false, root };
+    const raw = JSON.parse(readFileSync(marker, 'utf8')) as { startedAt?: string; pid?: number; root?: string };
+    const t = raw.startedAt ? Date.parse(raw.startedAt) : NaN;
+    const elapsedMs = Number.isFinite(t) ? Date.now() - t : undefined;
+    const stale = elapsedMs !== undefined && elapsedMs > BUILDING_STALE_MS;
+    return { building: !stale, root: raw.root ?? root, startedAt: raw.startedAt, elapsedMs, pid: raw.pid, stale };
+  } catch {
+    return { building: false, root };
+  }
 }

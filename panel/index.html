@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>graft-Max Dashboard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="brand">
+    <div class="logo">M</div>
+    <div>
+      <h1>graft-Max</h1>
+      <div class="sub">仓库上下文图谱 · 联邦工具 · <span id="ver">—</span></div>
+    </div>
+  </div>
+  <div class="sp"></div>
+  <span class="pill on" id="livePill"><span class="d"></span><span id="liveText">运行中</span></span>
+  <button class="ghost" id="btnTheme" title="切换亮暗主题" aria-label="切换主题">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    <span id="themeLabel">亮色</span>
+  </button>
+  <button class="primary" id="btnRefresh" title="立即刷新">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+    刷新
+  </button>
+</header>
+
+<div class="banner" id="banner" hidden>
+  <span>⚠</span><span id="bannerText">与 MCP 进程失联</span>
+  <div class="sp"></div><button class="sm" id="btnRetry">重试</button>
+</div>
+
+<div class="kpis">
+  <div class="kpi" id="kpiSessions">
+    <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg></span>活跃会话</div>
+    <div class="v" id="cSessions">–</div>
+    <div class="sub" id="sSessions">正在使用本服务的会话</div>
+  </div>
+  <div class="kpi">
+    <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg></span>累计工具调用</div>
+    <div class="v" id="cRequests">–</div>
+    <div class="sub" id="sRequests">本进程启动以来</div>
+  </div>
+  <div class="kpi">
+    <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>日志大小</div>
+    <div class="v" id="cLog">–</div>
+    <div class="sub" id="sLog">超过 5MB 自动滚动</div>
+  </div>
+  <div class="kpi" id="kpiBuild">
+    <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>建图状态</div>
+    <div class="v" id="cBuilding">–</div>
+    <div class="sub" id="sBuilding">图谱与代码同步状态</div>
+  </div>
+  <div class="kpi" id="kpiPanel">
+    <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>面板地址</div>
+    <div class="v" style="font-size:15px"><a id="panelUrl" href="#" style="color:var(--accent);text-decoration:none">—</a></div>
+    <div class="sub" id="sPanel">日志 · 会话 · 存储 · 统计</div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <h2>活跃会话</h2><span class="cnt" id="nSess">0</span>
+    <div class="sp"></div><span class="meta" id="updSess">—</span>
+  </div>
+  <div class="tw"><table id="sess"><thead><tr><th>状态</th><th>pid</th><th>用户</th><th>仓库</th><th>宿主进程</th><th>请求</th><th>启动时间</th></tr></thead><tbody></tbody></table></div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <h2>工具耗时</h2><span class="cnt" id="nTools">0</span>
+    <div class="sp"></div><span class="meta" id="updTools">按最近 800 行日志聚合 · 每 2s</span>
+  </div>
+  <div class="tw"><table id="tools"><thead><tr><th>工具</th><th>调用</th><th>平均</th><th>p50</th><th>p95</th><th>错误</th><th style="width:150px">耗时分布</th></tr></thead><tbody></tbody></table></div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <h2>联邦后端</h2><span class="cnt" id="nFed">0 / 3</span>
+    <div class="sp"></div>
+    <button class="sm" id="btnReprobe" title="清空探针缓存后重新探测三个后端">重试探针</button>
+    <span class="meta" id="updFed">成功 5 分钟 / 失败 30 秒后自动重探</span>
+  </div>
+  <div class="tw"><table id="fed"><thead><tr><th>后端</th><th>状态</th><th>探针</th><th>安装 / 修复</th><th style="width:80px"></th></tr></thead><tbody></tbody></table></div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <h2>存储 / 产物</h2><span class="cnt" id="nStore">0</span>
+    <div class="sp"></div><span class="meta" id="updStore">每 30s 刷新 · 点「复制」取路径</span>
+  </div>
+  <div class="tw"><table id="store"><thead><tr><th>仓库</th><th>产物</th><th>类型</th><th style="width:150px">占用</th><th>路径</th><th style="width:80px"></th></tr></thead><tbody></tbody></table></div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <h2>索引新鲜度</h2><span class="cnt" id="nFresh">0</span>
+    <div class="sp"></div><span class="meta">图谱指纹 vs 工作区 · 每 30s</span>
+  </div>
+  <div class="tw"><table id="fresh"><thead><tr><th>仓库</th><th>状态</th><th>改动</th><th>上次同步</th><th>说明</th></tr></thead><tbody></tbody></table></div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <h2>实时日志</h2>
+    <div class="sp"></div>
+    <span class="meta">刷新间隔 <input id="ms" value="2000" aria-label="刷新间隔毫秒"> ms</span>
+  </div>
+  <div class="toolbar">
+    <div class="chips" id="chips">
+      <button class="chip on" data-f="all">全部</button>
+      <button class="chip" data-f="err">只看错误</button>
+      <button class="chip" data-f="fed">联邦工具</button>
+      <button class="chip" data-f="boot">启动/退出</button>
+    </div>
+    <div class="sp"></div>
+    <button class="sm" id="btnPause">暂停</button>
+    <button class="sm" id="btnBottom">回到底部</button>
+  </div>
+  <div id="log"></div>
+</div>
+
+<footer>
+  由 <code>GRAFT_MAX_UI</code> 开启 · 默认只绑本机回环；非回环绑定时强制令牌
+  （令牌打印在启动 stderr，点带 <code>?token=</code> 的地址即可建立凭据）<br>
+  MCP 接入：<code>claude mcp add graft-max --scope user -- node &lt;path&gt;/dist/cli.js mcp</code>
+</footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -24,9 +24,16 @@
  * The repo-level writes stay exactly as they were. A project that has its own
  * `.mcp.json` and settings keeps using them; this is the floor underneath, not a
  * replacement.
+ *
+ * [graft-Max][N2] Every whole-file write here goes through `atomicWriteSync` +
+ * `validateJson`: `~/.claude.json` is the file Claude Code's own main process
+ * writes while we do, and project constraint §8 records what a plain overwrite did
+ * to it once — 246KB truncated to 852B, the user's entire MCP config lost. Tmp+rename
+ * in the same directory makes the swap atomic; the parse-before-write step refuses
+ * to put anything malformed on disk at all; a rotated `.bak` keeps the last version.
  */
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { atomicWriteSync } from '../util/atomic-write.js';
 import { hooksShim } from '../claude/shim-template.js';
 import { mergeGraftHooks } from '../claude/settings-merge.js';
 import { toPosixPath } from '../util/paths.js';
@@ -74,8 +81,7 @@ function upsertGlobalHooks(id: string, path: string, helpers: string): GlobalWri
   const before = JSON.stringify(existing);
   const { merged } = mergeGraftHooks(existing, helpers);
   if (JSON.stringify(merged) === before) return { id, path, action: 'unchanged' };
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(merged, null, 2)}\n`);
+  atomicWriteSync(path, `${JSON.stringify(merged, null, 2)}\n`, { backup: true, validateJson: true });
   return { id, path, action: existed ? 'updated' : 'created' };
 }
 
@@ -156,7 +162,7 @@ function dropUserServer(id: string, path: string, name: string, keep?: (entry: u
     if (!servers || typeof servers !== 'object' || !(name in servers)) return { id, path, action: 'unchanged' };
     if (keep?.(servers[name])) return { id, path, action: 'unchanged' };
     delete servers[name];
-    writeFileSync(path, `${JSON.stringify(loaded.root, null, 2)}\n`);
+    atomicWriteSync(path, `${JSON.stringify(loaded.root, null, 2)}\n`, { backup: true, validateJson: true });
     return { id, path, action: 'updated' };
   } catch {
     return { id, path, action: 'skipped-unparseable' };
@@ -184,7 +190,7 @@ export function disableGraftServerIn(home: string, folder: string): GlobalWrite 
     const off = Array.isArray(here.disabledMcpServers) ? (here.disabledMcpServers as string[]) : [];
     if (off.includes('graft')) return { id, path, action: 'unchanged' };
     here.disabledMcpServers = [...off, 'graft'];
-    writeFileSync(path, `${JSON.stringify(root, null, 2)}\n`);
+    atomicWriteSync(path, `${JSON.stringify(root, null, 2)}\n`, { backup: true, validateJson: true });
     return { id, path, action: 'updated' };
   } catch {
     return { id, path, action: 'skipped-unparseable' };
@@ -223,7 +229,7 @@ export function fitTrailServerToMachine(home: string, folder: string, has: { tra
     } else {
       return { id, path, action: 'unchanged' };
     }
-    writeFileSync(path, `${JSON.stringify(root, null, 2)}\n`);
+    atomicWriteSync(path, `${JSON.stringify(root, null, 2)}\n`, { backup: true, validateJson: true });
     return { id, path, action: 'updated' };
   } catch {
     return { id, path, action: 'skipped-unparseable' };

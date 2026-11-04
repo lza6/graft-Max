@@ -1,0 +1,18 @@
+qmd://rules/APK逆向知识库/SearchAI-逆向报告.md:1 #db433d
+Title: SearchAI v1.0.1 逆向报告（2026-10-28）
+Score:   0%
+
+@@ -1,3 @@ (0 before, 24 after)
+# SearchAI v1.0.1 逆向报告（2026-10-28）
+
+> 完整在线版: https://github.com/lza6/searchai-app-2api
+
+
+qmd://rules/APK逆向知识库/GulfSecureVPN-逆向报告.md:1 #d7313b
+Title: Gulf Secure VPN 1.0.38 (M0D) 逆向分析报告
+Score:   0%
+
+@@ -1,3 @@ (0 before, 47 after)
+# Gulf Secure VPN 1.0.38 (M0D) 逆向分析报告
+
+日期: 2026-10-28 · 工作区: `Downloads/gulf_vpn_ws/`
