@@ -13,8 +13,21 @@ name: CI (graft-Max gate)
 on:
   push:
     branches: [main]
+    # [K2] 纯文档/规划/证据提交不触发 gate：本会话亲历了"连续推送互相取消、
+    # 列表长期显示 in_progress"的噪声，且文档提交占用了本该给代码用的 runner 分钟数。
+    # 注意：workflow 文件自身与任何 src/test/scripts 改动仍然触发（路径不在忽略表里）。
+    paths-ignore:
+      - '**/*.md'
+      - 'docs-selfdev/**'
+      - 'evidence/**'
+      - '改进计划/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs-selfdev/**'
+      - 'evidence/**'
+      - '改进计划/**'
   workflow_dispatch:
 
 permissions:
