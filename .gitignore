@@ -41,5 +41,10 @@ memories.db-shm
 *.db.backup-*
 # 本机级 MCP 配置（每台机器不同），不入库
 .mcp.json
+
+# atomicWrite 的备份轮转文件（.bak / .bak.1 / .bak.2）：写盘安全网，不是产物，不入库
+# （2026-11 实测：upkeep 写 .mcp.json 时会在仓库根留下 .mcp.json.bak）
+*.bak
+*.bak.[0-9]
 # 本地 trail 运行时数据
 .trail/

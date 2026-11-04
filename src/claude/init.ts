@@ -167,7 +167,7 @@ export function runInit(
   // Register the graft MCP server in the project's .mcp.json so Claude Code
   // exposes graft_find_code/graft_trace_calls/etc. as tools — the same keyed merge the
   // other hosts use (existing servers preserved; unparseable files skipped).
-  const mcp = mergeJsonKey('claude', mcpTarget, 'mcpServers', serverEntry({ brand: 'graft' }), 'graft');
+  const mcp = mergeJsonKey('claude', mcpTarget, 'mcpServers', serverEntry({ brand: 'graft', slot: 'graft' }), 'graft');
 
   // The same wiring again, one level up in `~/.claude`, because everything above
   // this line can be erased by a `.gitignore` and lost to `git worktree add`. See

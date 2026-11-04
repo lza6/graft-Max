@@ -138,7 +138,7 @@ export function installClaudeGlobal(home: string, brand: Brand = 'graft'): Globa
   // so upstream's own `graft init` keeps behaving exactly as before.
   if (process.env.GRAFT_MAX_MCP === '1') {
     try {
-      out.push(mergeJsonKey('claude-global-mcp-max', mcp.path, 'mcpServers', serverEntry({ brand }), 'graft-max'));
+      out.push(mergeJsonKey('claude-global-mcp-max', mcp.path, 'mcpServers', serverEntry({ brand, slot: 'graft-max' }), 'graft-max'));
     } catch {
       out.push({ id: 'claude-global-mcp-max', path: mcp.path, action: 'skipped-unparseable' });
     }

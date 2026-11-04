@@ -333,6 +333,7 @@ npm run build                  # 构建全绿（含 panel 前端的 tsc + esbuil
 node dist/cli.js --version     # 0.28.0-max.N
 npm test                       # 本轮基线：0 fail（4292 tests / 4187 pass）
 node scripts/check-coverage.mjs # 自研 8 文件覆盖率门禁（语句≥80%/分支≥70% Win）
+node scripts/log-attribution.mjs # 日志归因：哪个仓库·何时·暴露了什么·实际调了什么（--json 可机读）
 node e2e/e2e-ci-smoke.mjs      # 24/24（自包含：不依赖外部后端，CI 也跑这条）
 node e2e/e2e-federation.mjs    # 9/9（需真实 qmd/gitnexus）
 node e2e/e2e-dashboard.mjs     # 4/4

@@ -91,9 +91,18 @@ function graftOnPath(): boolean {
  * entry decision to MAX_LAUNCH under the `graft-max` id — never the upstream
  * slot. serverEntry callers that don't set it keep upstream behavior verbatim.
  */
-export function serverEntry(opts: { onPath?: boolean; brand?: 'graft' | 'trail' } = {}): { command: string; args: string[] } {
+export function serverEntry(opts: { onPath?: boolean; brand?: 'graft' | 'trail'; slot?: 'graft' | 'trail' | 'graft-max' } = {}): { command: string; args: string[] } {
   const trail = opts.brand === 'trail';
-  if (process.env.GRAFT_MAX_MCP === '1') return MAX_LAUNCH;
+  // [修 MAX-SLOT] `slot` 是"这条配置要写进哪个 key"。MAX_LAUNCH 只有在**我们自己的
+  // `graft-max` 槽位**上才允许出现。
+  //
+  // 历史 bug（2026-11 实测抓到）：这里原来只判 `GRAFT_MAX_MCP === '1'` 就返回 MAX_LAUNCH，
+  // 而 `init.ts` 的 upkeep 刷新用 `mergeJsonKey(..., 'graft')` 写**上游槽位**——于是我们的
+  // 二进制在每次 boot 时把项目 `.mcp.json` 里的 `mcpServers.graft` 从
+  // `npx -y @nanonets/graft mcp` 改写成我们自己的 dist 路径，并留下 `.bak`。
+  // 这违反 `docs-selfdev/项目约束.md` §1.5「绝不写上游 graft 槽位」。
+  const slot = opts.slot ?? (trail ? 'trail' : 'graft');
+  if (slot === 'graft-max' && process.env.GRAFT_MAX_MCP === '1') return MAX_LAUNCH;
   const forced = process.env.GRAFT_MCP_NPX;
   if (forced !== undefined && forced !== '' && forced !== '0' && forced !== 'false') return trail ? TRAIL_NPX_LAUNCH : NPX_LAUNCH;
   if (trail) return (opts.onPath ?? trailOnPath()) ? TRAIL_BIN_LAUNCH : TRAIL_NPX_LAUNCH;

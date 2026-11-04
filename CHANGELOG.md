@@ -3,6 +3,39 @@
 所有重要改动记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循语义化：`0.28.0-max.N`（上游版本-max 补丁位）。
 
+## [0.28.0-max.12] — 2026-11
+
+> 补丁版：修一个**真实的红线违规**（fork 抢上游注册槽位）+ 交付"日志归因"诊断工具。
+
+### 修复（P1 · 违反自身红线的真事故）
+
+- **`GRAFT_MAX_MCP=1` 时会把项目 `.mcp.json` 里的上游 `graft` 槽位改写成我们自己的路径**。
+  根因：`serverEntry()` 只判开关就返回本机 `dist/cli.js`，而 upkeep 刷新写的是
+  `mcpServers.graft`（上游槽位）——于是每次 boot 静默改写用户项目配置、并留下 `.mcp.json.bak`。
+  这违反 `docs-selfdev/项目约束.md` §1.5「Max 永不写上游槽位」。
+  实测证据：本仓库 `.mcp.json` 的 `mcpServers.graft` 曾从 `npx -y @nanonets/graft mcp`
+  变成 `node D:\自研工具\graft-Max\dist\cli.js mcp`，`.bak` 里留着原文。
+  **修法**：`serverEntry({ slot })` 显式区分槽位，只有 `slot === 'graft-max'` 才允许出现本机路径；
+  上游 `graft` / `trail` 槽位一律保持上游命令。回归测试 `test/max-slot-isolation.test.ts`（5 条）
+  + 端到端复验（带上游 `.mcp.json` 的仓库 boot 一次后槽位不变、无 `.bak` 残留）。
+- `.gitignore` 增 `*.bak` / `*.bak.[0-9]`（atomicWrite 的备份轮转文件不该入库）。
+
+### 新增
+
+- **`scripts/log-attribution.mjs` 日志归因工具**：一条命令回答"哪个仓库、什么时候、起了几次服务、
+  暴露了哪些工具、实际调了几次"，并区分**真实仓库**与**测试沙箱**（把 `trail-test-run-*` /
+  `gm-v2-*` / `graft-mcpsrv*` 等归类掉）。支持 `--json` / `--root X` / `--recent N`。
+  起因：首轮汇报把测试的调用算成了"真实使用"（"161 次"里只有 157 次属于真实仓库会话、
+  85 次是沙箱），工具把这件事变成可复跑的查询。
+- `docs-selfdev/日志归因.md`：首次归因的完整数字（683 个会话段、6 个版本、逐仓库调用分布、
+  4 个"暴露但 0 调用"的真实项目及其排查顺序）。
+- `docs-selfdev/项目约束.md` §1.6：把"槽位判定"写成实现约束（不能只靠调用方自觉）。
+
+### 验证
+
+`npm test` **4297 tests / 4192 pass / 0 fail**；端到端槽位复验 3/3（槽位不变、无 .bak、单槽位）；
+`node scripts/log-attribution.mjs` 全量/`--json`/`--root` 三种模式实测可用。
+
 ## [0.28.0-max.11] — 2026-11
 
 > 本轮对应 `改进计划/下一步改进指南.md` v4.0 的 M 系列（M0–M15 中可执行的全部）。
