@@ -180,7 +180,13 @@ SOP 落地：`docs-selfdev/上游同步SOP.md`（热路径 10 文件清单、步
 > 每次推送都会**取消上一条在跑的 run**，于是列表里长期显示 in_progress。
 > 发行版所指提交 `99b4894` 的 gate 已实测 **success 双平台**；其后的 3 个提交
 > 只改文档/门禁脚本，队列消化完会给出同样结论。
-> **下轮改进（已写进 v5 指南 K2）**：给纯文档路径加 `paths-ignore`，避免用 gate 分钟数换一次格式检查。
+> **已完成（K2 半程）**：`ci-max.yml` 已加 `paths-ignore`（`**/*.md`、`docs-selfdev/`、`evidence/`、`改进计划/`），
+> 纯文档提交不再触发 gate；workflow 文件与 `src/test/scripts` 改动仍触发。
+>
+> **终态确认（`941927d`，含全部代码改动）**：`CI (graft-Max gate)` **双平台 success** ——
+> ubuntu leg 的 `Typecheck / Build / Coverage gate / Unit tests(npm test)` 全部 success，
+> windows leg success；`windows` 早于 `ubuntu` 完成。覆盖率门禁首次在 Linux 上通过
+> （平台分档门限按设计生效）。
 | 压测（max.11） | 50 并发 3 轮中位 **p95 59.6ms** / 1054.6 req/s / 零错误；`/storage` 20 并发 p99 13.8ms；`/healthz` 压力下 p99 3.4ms | `e2e/panel-load.mjs` 10/10 |
 | M1/M2/M17 发布 | blocked（无 npm/Docker Hub 账号） | — |
 | M3/M6/M12 | 未启动（P3 观察项/大改，指南允许按需） | — |
