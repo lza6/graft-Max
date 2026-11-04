@@ -97,24 +97,31 @@ try {
   check('1c 串行 /storage p50 < 5ms（缓存生效，修复前 3201ms）', serial['/storage'].p50 < 5, `${serial['/storage'].p50}ms`);
   check('1d 串行 /fresh p50 < 10ms', serial['/fresh'].p50 < 10, `${serial['/fresh'].p50}ms`);
 
-  // 2) 50 并发 /stats 打 DURATION_MS
-  const lat = [];
+  // 2) 50 并发 /stats 打 DURATION_MS —— 跑 3 轮取中位数（本机噪声实测 p95 86~121ms，
+  //    单轮断言会让门禁时红时绿；中位数才是"这台机器的真实水平"）。
+  const rounds = [];
   let errors = 0;
-  const deadline = Date.now() + DURATION_MS;
   let requests = 0;
-  await Promise.all(
-    Array.from({ length: CONC }, async () => {
-      while (Date.now() < deadline) {
-        const r = await timed('/stats').catch(() => ({ ms: 0, status: 0 }));
-        if (r.status !== 200) errors++;
-        else lat.push(r.ms);
-        requests++;
-      }
-    }),
-  );
-  const qps = requests / (DURATION_MS / 1000);
-  console.log(`  并发 ${CONC} · ${DURATION_MS / 1000}s · ${requests} 请求 · ${r1(qps)} req/s · p50 ${r1(pct(lat, 50))}ms p95 ${r1(pct(lat, 95))}ms p99 ${r1(pct(lat, 99))}ms · 错误 ${errors}`);
-  check('2 50 并发 /stats p95 < 120ms（max.9 基线 108ms）', pct(lat, 95) < 120, `${r1(pct(lat, 95))}ms`);
+  for (let round = 0; round < 3; round++) {
+    const lat = [];
+    const deadline = Date.now() + DURATION_MS;
+    await Promise.all(
+      Array.from({ length: CONC }, async () => {
+        while (Date.now() < deadline) {
+          const r = await timed('/stats').catch(() => ({ ms: 0, status: 0 }));
+          if (r.status !== 200) errors++;
+          else lat.push(r.ms);
+          requests++;
+        }
+      }),
+    );
+    rounds.push({ p50: pct(lat, 50), p95: pct(lat, 95), p99: pct(lat, 99), n: lat.length });
+    console.log(`  第 ${round + 1} 轮: ${lat.length} 请求 · p50 ${r1(pct(lat, 50))}ms p95 ${r1(pct(lat, 95))}ms p99 ${r1(pct(lat, 99))}ms`);
+  }
+  const med = (k) => pct(rounds.map((r) => r[k]), 50);
+  const qps = requests / ((DURATION_MS / 1000) * 3);
+  console.log(`  并发 ${CONC} × 3 轮 = ${requests} 请求 · ${r1(qps)} req/s · 中位 p50 ${r1(med('p50'))}ms p95 ${r1(med('p95'))}ms p99 ${r1(med('p99'))}ms · 错误 ${errors}`);
+  check('2 50 并发 /stats 中位 p95 < 120ms（max.9 基线 108ms）', med('p95') < 120, `${r1(med('p95'))}ms（三轮: ${rounds.map((r) => r1(r.p95)).join('/')}）`);
   check('2b 并发零错误（无 5xx / 无超时）', errors === 0, `${errors} 个错误`);
   check('2c 吞吐 ≥ 100 req/s', qps >= 100, `${r1(qps)} req/s`);
 

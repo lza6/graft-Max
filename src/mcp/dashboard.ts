@@ -498,7 +498,8 @@ function page(port = DEFAULT_PORT): string {
 const normPath = (p: string): string => p.split(String.fromCharCode(92)).join('/').replace(/\/+$/, '').toLowerCase();
 
 /** 本面板要展示的全部仓库：主 root + 所有活跃会话的 cwd（大小写/分隔符归一后去重）。 */
-export function knownRoots(primary: string): string[] {
+/** @param sessions 已经取过的会话快照（`/stats` 一次请求里复用，避免重复读 sessions.json） */
+export function knownRoots(primary: string, sessions?: SessionRow[]): string[] {
   const ordered: string[] = [];
   const seen = new Set<string>();
   const push = (raw: string): void => {
@@ -510,7 +511,7 @@ export function knownRoots(primary: string): string[] {
     ordered.push(p);
   };
   push(primary);
-  for (const s of liveSessions()) push(String(s.cwd ?? ''));
+  for (const s of sessions ?? liveSessions()) push(String(s.cwd ?? ''));
   return ordered;
 }
 
@@ -694,8 +695,10 @@ export function startDashboard(explicitPort?: number, root = process.cwd()): Ser
         try {
           rotated = (await stat(`${logPath()}.1`)).size > 0 ? 'yes' : '';
         } catch {/* none */}
+        // 一次请求只读一次 sessions.json（原先 /stats 里 liveSessions() 被调了两次：
+        // 一次取请求数、一次经 knownRoots() —— 50 并发下等于 100 次/s 的重复文件读）
         const sessions: SessionRow[] = liveSessions();
-        const roots = knownRoots(root);
+        const roots = knownRoots(root, sessions);
         // [N13/N14] 建图状态：状态文件由建图子进程维护（P3-9），这里只读，
         // 并且按"已知的全部仓库"扫，而不是只扫 cwd/graft（trail 布局在 .trail/cache）。
         const building: BuildingStatus[] = roots.map((r) => buildingStatus(r)).filter((b) => b.building);

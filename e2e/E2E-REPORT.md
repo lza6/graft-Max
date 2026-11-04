@@ -64,14 +64,14 @@
 ## 4. 性能（`panel-load.mjs`，本机单机）
 
 ```
-串行 p50/p95: /stats=3.7/4.4ms  /tail?n=200=1.4/1.8ms  /sessions=1.1/1.5ms
-              /storage=1.1/1.3ms  /fresh=1.1/1.3ms
-并发 50 · 6s · 4181 请求 · 696.8 req/s · p50 70.8ms p95 86.5ms p99 120.1ms · 错误 0
-/storage 20 并发 p50 13.4ms p99 14.2ms
-压力下 /healthz p99 3ms（事件循环未被目录遍历堵死）
+串行 p50/p95: /stats=2.7/4.0ms  /tail?n=200=1.2/1.4ms  /sessions=1.4/1.8ms
+              /storage=1.3/1.6ms  /fresh=1.5/2.2ms
+并发 50 × 3 轮 · 12987 请求 · 721.5 req/s · 中位 p50 69.2ms / p95 83.8ms / p99 105.2ms · 错误 0
+/storage 20 并发 p50 12.5ms p99 14.4ms
+压力下 /healthz p99 1.7ms（事件循环未被目录遍历堵死）
 ```
 
-对照 max.9 基线：`/stats` 50 并发 p95 108ms → 本轮 **86.5ms**（新增 4 张卡后仍更快，
+对照 max.9 基线：`/stats` 50 并发 p95 108ms → 本轮 **83.8ms**（3 轮中位）（新增 4 张卡后仍更快，
 因为 toolStats 仍是 2s 缓存、storage 改为按 root 分桶）。
 
 ## 5. 容器（Docker Desktop 29.9.2）

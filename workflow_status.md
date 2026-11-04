@@ -23,7 +23,7 @@
 | A4 | 联邦 E2E 真实通过 | done | `e2e-federation` 9/9、`e2e-fed-perf` 9/9（含内嵌路径 `qmd://agentcode/README.md:20 #101e06` 断言） |
 | A5 | 面板 UI 真实浏览器验收 ≥12 条 | done | `ui-interact` **26/26**，零 pageerror / 零 console error，截图 `e2e/ui-interact.png` |
 | A6 | Docker 部署真实可用 | done | `e2e-docker` **13/13**（新镜像 max.10）；`verify-compose` **12/12**（热更新后的真实实例） |
-| A7 | 面板端点压测有数据且不劣化 | done | 串行 p50 `/stats` 3.7ms、`/tail` 1.4ms、`/storage` 1.1ms；50 并发 p95 **86.5ms**（max.9: 108ms）；697 req/s；零错误 |
+| A7 | 面板端点压测有数据且不劣化 | done | 串行 p50 `/stats` 2.7ms、`/tail` 1.2ms、`/storage` 1.3ms；50 并发 p95 **83.8ms**（max.9: 108ms）；721.5 req/s；零错误 |
 | A8 | 文档与实现一致 | done | README / CHANGELOG / `docs-selfdev/*` / `test_ledger.md` / `policy.md` 同步 |
 | A9 | 安全三连实测 | done | Host 伪造 403 / 无令牌 401 / 容器端口只绑 `127.0.0.1` |
 | A10 | 用户全局文件幂等无截断 | done | `test/atomic-write.test.ts` + `test/max-prompt.test.ts`（7/7） |
@@ -81,10 +81,10 @@ node e2e/verify-compose.mjs           12/12（部署后真实实例：端口回�
 
 压测（`e2e/panel-load.mjs`，本机单机）：
 ```
-串行 p50/p95: /stats=3.7/4.4ms  /tail?n=200=1.4/1.8ms  /sessions=1.1/1.5ms  /storage=1.1/1.3ms  /fresh=1.1/1.3ms
-并发 50 · 6s · 4181 请求 · 696.8 req/s · p50 70.8ms p95 86.5ms p99 120.1ms · 错误 0
-/storage 20 并发 p50 13.4ms p99 14.2ms
-压力下 /healthz p99 3ms（事件循环未被目录遍历堵死）
+串行 p50/p95: /stats=2.7/4.0ms  /tail?n=200=1.2/1.4ms  /sessions=1.4/1.8ms  /storage=1.3/1.6ms  /fresh=1.5/2.2ms
+并发 50 × 3 轮 · 12987 请求 · 721.5 req/s · 中位 p50 69.2ms / p95 83.8ms / p99 105.2ms · 错误 0
+/storage 20 并发 p50 12.5ms p99 14.4ms
+压力下 /healthz p99 1.7ms（事件循环未被目录遍历堵死）
 ```
 
 Docker 热更新（`docker-compose.max.yml`）：
