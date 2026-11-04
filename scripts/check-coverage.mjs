@@ -39,7 +39,7 @@ const out = execFileSync(
 // ℹ   devlog.ts           |  95.84 |    71.43 |   86.27 | ...
 const rows = {};
 for (const line of out.split('\n')) {
-  const m = /^\u2139\s+(\S+\.ts)\s+\|\s+([\d.]+)\s+\|\s+([\d.]+)\s+\|\s+([\d.]+)/.exec(line);
+  const m = /(\S+\.ts)\s+\|\s+([\d.]+)\s+\|\s+([\d.]+)\s+\|\s+([\d.]+)/.exec(line);
   if (m) rows[m[1]] = { lines: Number(m[2]), branch: Number(m[3]) };
 }
 
