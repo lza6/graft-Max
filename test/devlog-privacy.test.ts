@@ -25,9 +25,11 @@ const devlog = await import('../src/mcp/devlog.js');
 devlog.setDevlogHomeForTest(gmHome);
 const { registerSession, SESSIONS_FILE, logPath, tightenPerms, endSession } = devlog;
 
-test.after(() => {
+test.after(async () => {
+  devlog.disableDevlogForTest();
+  await new Promise((r) => setTimeout(r, 150)); // 让在飞的 append/rotate 落完
   endSession();
-  rmSync(home, { recursive: true, force: true });
+  rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 test('[M10] registerSession 落盘的 hostCmd 不含密钥值与内网路径，只含可执行名', () => {
@@ -74,7 +76,7 @@ test('[M9] 日志文件首次写入后 chmod 0600（POSIX）', { skip: process.p
   } finally {
     process.env.GRAFT_MAX_LOG = prev;
     devlog.setDevlogHomeForTest(gmHome); // 交还给本文件的共享沙箱
-    rmSync(fresh, { recursive: true, force: true });
+    rmSync(fresh, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   }
 });
 

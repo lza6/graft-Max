@@ -180,5 +180,5 @@ test('5s 硬超时（此处调到 40ms）：超时 kill 子进程并丢批次', 
 });
 
 test('cleanup', () => {
-  rmSync(home, { recursive: true, force: true });
+  rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });

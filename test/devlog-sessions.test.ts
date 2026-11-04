@@ -164,6 +164,7 @@ test('touchSession 幂等：20s 节流窗口内不重复写盘', () => {
 });
 
 test('cleanup', () => {
-  rmSync(home, { recursive: true, force: true });
+  devlog.disableDevlogForTest();
+  rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   assert.equal(existsSync(home), false);
 });

@@ -67,6 +67,15 @@ export function tightenPerms(path: string): void {
   }
 }
 
+/**
+ * [测试用] 立刻停写日志。清理沙箱目录前必须调它：写是异步的（appendFile + rotate/prune
+ * 都 fire-and-forget），目录删到一半又被建出文件 → Windows 报 ENOTEMPTY、Linux 偶发
+ * 残留（CI 抓到的 hookFailed 就是这个）。
+ */
+export function disableDevlogForTest(): void {
+  enabled = false;
+}
+
 export function isLogEnabled(): boolean {
   return enabled;
 }

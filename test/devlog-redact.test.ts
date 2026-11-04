@@ -22,6 +22,16 @@ process.env.GRAFT_MAX_LOG = logFile;
 const devlogMod = await import('../src/mcp/devlog.js');
 devlogMod.setDevlogHomeForTest(dir); // GRAFT_MAX_LOG 已指向 logFile，setter 会以它为准
 const { dlog, dlogBlock, redact, __resetRedactCacheForTest } = devlogMod;
+// 轮询而非固定 sleep：全量并发时 append 可能超过 80ms（CI 满载实测会漏断言）。
+const waitFor = async (pred: (text: string) => boolean, ms = 3000): Promise<string> => {
+  const t0 = Date.now();
+  let text = readLog();
+  while (!pred(text) && Date.now() - t0 < ms) {
+    await new Promise((r) => setTimeout(r, 25));
+    text = readLog();
+  }
+  return text;
+};
 const settle = () => new Promise((r) => setTimeout(r, 80));
 const readLog = (): string => (existsSync(logFile) ? readFileSync(logFile, 'utf8') : '');
 
@@ -64,8 +74,7 @@ test('redact 不误伤：普通代码/路径/短串原样保留', () => {
 
 test('dlog 落盘的行已脱敏', async () => {
   dlog('--> tools/call name=x args={"apiKey":"sk-live0123456789abcdef"}');
-  await settle();
-  const text = readLog();
+  const text = await waitFor((t) => t.includes('sk-l'));
   assert.ok(!text.includes('0123456789abcdef'), `落盘含明文: ${text}`);
   assert.match(text, /sk-l\*\*\*/);
 });
@@ -75,8 +84,7 @@ test('dlogBlock 的 body（工具入参/输出）也脱敏，结构保留', asyn
     '--> tools/call  id=9  name=max_find_code',
     JSON.stringify({ query: 'add', token: 'ghp_abcdefghijklmnopqrstuvwxyz123456' }, null, 1),
   );
-  await settle();
-  const text = readLog();
+  const text = await waitFor((t) => t.includes('"token"'));
   assert.ok(!text.includes('ghijklmnopqrstuvwxyz123456'), `body 明文落盘: ${text}`);
   assert.ok(text.includes('"query": "add"'), '非密钥字段必须原样（结构可 grep）');
 });
@@ -86,8 +94,8 @@ test('GRAFT_MAX_LOG_REDACT=0 一键关（排障时需要看原文）', async () 
   process.env.GRAFT_MAX_LOG_REDACT = '0';
   try {
     dlog('raw: sk-proj4abcdefghij0123456789');
-    await settle();
-    assert.ok(readLog().includes('sk-proj4abcdefghij0123456789'), '关闭后应保留原文');
+    const raw = await waitFor((t) => t.includes('sk-proj4'));
+    assert.ok(raw.includes('sk-proj4abcdefghij0123456789'), '关闭后应保留原文');
   } finally {
     delete process.env.GRAFT_MAX_LOG_REDACT;
     __resetRedactCacheForTest(); // 恢复默认开，避免影响后续用例
@@ -100,5 +108,5 @@ test('redact 幂等且不做多余替换', () => {
 });
 
 test('cleanup', () => {
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });

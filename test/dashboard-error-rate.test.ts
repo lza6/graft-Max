@@ -50,7 +50,7 @@ test.after(async () => {
     srv.close();
     await once(srv, 'close').catch(() => {});
   }
-  rmSync(home, { recursive: true, force: true });
+  rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 test('[M7] /stats.errorRate：3/10 = 0.3，windowLines=10', async () => {
@@ -102,5 +102,5 @@ test('[M7] 空窗口：无工具返回行时 rate=null', async () => {
   const er = await dash.errorRate();
   // 当前窗口（第一个 server 的日志）已有数据
   assert.equal(er.windowLines, 11);
-  rmSync(home2, { recursive: true, force: true });
+  rmSync(home2, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });

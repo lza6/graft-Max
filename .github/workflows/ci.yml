@@ -59,18 +59,22 @@ jobs:
       # 这里的重跑是**文件级**的：断言一个没改、失败语义不放宽——同一份测试文件在
       # 空闲 runner 上再跑一遍，仍失败才算真红。观察两个 release 周期，若根因定位
       # （fold/creditWindow 的锁等待在慢盘上的窗口）再回测试代码里修。
-      - name: Test
+      # M13-flaky 治理（诚实版）：这一族上游测试在慢 runner 上有计时型偶发失败
+      # （skills-credit / skills-session-start / claude-codex-journeys-2 / mcp-tools /
+      # claude-codex-pre-bash，均单独重跑必绿；README/workflow_status §5 有记录）。
+      #
+      # 做法不是"重跑一次就当通过"，而是：**整份套件重跑一次，两次都失败才算红**。
+      # 真失败不会因为重跑而变绿；偶发波动不会被误报成代码问题。
+      - name: Test (attempt 1)
+        id: test1
+        continue-on-error: true
         run: npm test
 
-      - name: Re-run known-flaky files once on failure
-        if: failure()
+      - name: Test (attempt 2 — a single flake must not mask or fake a red)
+        if: steps.test1.outcome == 'failure'
         run: |
-          echo "First run failed. Re-running the known-flaky files alone (assertions unchanged)."
-          # M13-flaky 治理：这一族文件在慢 runner / 高并发下偶发计时型失败，
-          # 单独重跑必绿（max.10/max.11 收尾各复现过一次，均已记录在 workflow_status §5）。
-          # 断言零改动、失败语义不放宽：仍失败才算真红。
-          node --import tsx --test test/skills-credit-1b-review.test.ts test/skills-credit-1b.test.ts test/skills-credit-2.test.ts test/skills-credit.test.ts
-          node --import tsx --test test/skills-session-start.test.ts test/claude-codex-journeys-2.test.ts test/mcp-tools.test.ts test/claude-codex-pre-bash.test.ts
+          echo "::warning::第一轮有失败，整份套件重跑一次（不是只跑失败文件，两次都红才算真红）"
+          npm test
 
   node24-wasm:
     name: Node 24 WASM regression
