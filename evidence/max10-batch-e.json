@@ -1,0 +1,75 @@
+{
+  "task_id": "max10-batch-e",
+  "title": "批次 E · 文档与知识沉淀（N19 文档对齐 / N20 三篇 docs-selfdev）+ 规划归档 + 发布物",
+  "status": "done",
+  "timestamp": "2026-11-04T09:10:00+08:00",
+  "commands_executed": [
+    {
+      "cmd": "npm pack --ignore-scripts --pack-destination /tmp/gm-pack10",
+      "exit_code": 0,
+      "raw_output_tail": "filename: graft-max-0.28.0-max.10.tgz / package size: 3.4 MB / unpacked size: 21.0 MB / total files: 1539"
+    },
+    {
+      "cmd": "npm i -g --prefix /tmp/gm-global10 ./graft-max-0.28.0-max.10.tgz ; graft-max.cmd --version",
+      "exit_code": 0,
+      "raw_output_tail": "0.28.0-max.10（干净 prefix 安装可用）"
+    },
+    {
+      "cmd": "tar -tzf graft-max-0.28.0-max.10.tgz | grep -cE 'dist/panel/' ; ... | grep -c '\\.wasm$'",
+      "exit_code": 0,
+      "raw_output_tail": "dist/panel/ 3 个文件（app.js/index.html/style.css）；wasm 9 个"
+    },
+    {
+      "cmd": "node -e \"require('js-yaml').load(read('.github/workflows/ci-max.yml'))\"",
+      "exit_code": 0,
+      "raw_output_tail": "parsed ok; jobs = max-gate; runs-on ${{ matrix.os }}; steps 9"
+    },
+    {
+      "cmd": "git push origin main ; git push origin v0.28.0-max.10",
+      "exit_code": 0,
+      "raw_output_tail": "c7fd6ab..1ea4e63  main -> main ；[new tag] v0.28.0-max.10 -> v0.28.0-max.10"
+    },
+    {
+      "cmd": "gh release create v0.28.0-max.10 <tarball> -R lza6/graft-Max --notes-file <notes>",
+      "exit_code": 0,
+      "raw_output_tail": "https://github.com/lza6/graft-Max/releases/tag/v0.28.0-max.10（附 graft-max-0.28.0-max.10.tgz）"
+    },
+    {
+      "cmd": "gh run list -R lza6/graft-Max (push main, 2026-11-04T01:05:45Z)",
+      "exit_code": 0,
+      "raw_output_tail": "CI (graft-Max gate) 41751627191 in_progress ；CI 41751627183 in_progress ；CodeQL in_progress ；Blast cache completed/success"
+    }
+  ],
+  "files_changed": [
+    "README.md（工具口径 6+3、max_search_semantic、面板新卡与安全两形态、8 个新 env、验证链）",
+    "CHANGELOG.md（max.10 全量条目 + 已知限制）",
+    "docs-selfdev/面板架构.md（new：路由表/轮询拓扑/安全边界/多仓库/前端纪律/已知坑）",
+    "docs-selfdev/联邦契约.md（new：三个后端输出格式 + 12 条软错误矩阵 + 观测面）",
+    "docs-selfdev/失败模式手册.md（new：按症状查 A–G 七章 + 一页速查）",
+    "docs-selfdev/上游同步SOP.md（new：热路径清单/步骤/判定/反模式/本次实测）",
+    "workflow_status.md（N0–N20 逐条状态 + 验证日志 + 审查发现 + 已知限制）",
+    "policy.md（new：覆盖率/付费 API/分级/审查/证据/发布/性能硬门禁）",
+    "test_ledger.md（new：真实测试台账 + 明确标注未执行项）",
+    "e2e/E2E-REPORT.md（全量重写）",
+    "改进计划/README.md（索引更新）、改进计划/下一步改进指南.md（新写 v4.0）",
+    "改进计划/archive/下一步改进指南-v3-max10-已交付.md（git mv 归档）",
+    "改进计划/archive/参考对标-差距审计-已归档.md（根目录重复文档移入）",
+    "evidence/max10-batch-{a,b,c,d}.json"
+  ],
+  "tasks": {
+    "N19": "done — README/CHANGELOG/E2E-REPORT/workflow_status 与实现逐条对齐（工具数、env 表、面板安全两形态、验证链、所有断言数）",
+    "N20": "done — docs-selfdev 新增 3 篇（面板架构 / 联邦契约 / 失败模式手册）+ 额外出上游同步 SOP"
+  },
+  "claims_check": {
+    "说明": "文档里每个数字都能在本文件或同目录其它 evidence 里找到出处",
+    "README 工具口径": "6 个 graft + 最多 3 个联邦（实测：未装后端时 tools/list 7 个；装齐 9 个）",
+    "README 环境变量表": "新增的 8 个变量全部在代码里可 grep 到",
+    "CHANGELOG 每条": "对应 workflow_status §3 的任务行",
+    "E2E-REPORT 数字": "对应本次会话内各脚本的真实输出"
+  },
+  "limitations": [
+    "N17 发布仍是 blocked（无 npm/Docker Hub 账号）：本轮以 tarball + GitHub Release + 本机 Docker 热更新闭环",
+    "GitHub Actions 的真绿勾：CI (graft-Max gate) 已触发并在跑，最终结论需等运行结束（见 workflow_status §6）",
+    "上一版 push（2026-11-03T19:25）的旧 CI run 是 failure，与本轮改动无关（本轮为新增 ci-max.yml 的第一条 gate）"
+  ]
+}
