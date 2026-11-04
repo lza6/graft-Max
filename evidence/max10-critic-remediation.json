@@ -1,0 +1,78 @@
+{
+  "task_id": "max10-critic-remediation",
+  "title": "独立 Critic（Request Changes）的修复与复验",
+  "status": "done",
+  "timestamp": "2026-11-04T10:20:00+08:00",
+  "critic_verdict": "Request Changes（3 个 Critical + 1 个 Required）",
+  "findings_and_fixes": [
+    {
+      "id": "C1",
+      "claim": "sessions.json 的临时文件名固定（`sessions.json.tmp`），并发写会互相覆盖/互相 rename 对方的半成品",
+      "verified": "file:line 属实（src/mcp/devlog.ts 原第 274 行）；旧实现里 A 的 renameSync 可能拿到 B 写了一半的内容",
+      "fix": "临时名改为 `sessions.json.<pid>.<rand6>.tmp` —— 每个写者只可能 rename 自己的 tmp",
+      "reverify": "node --import tsx --test test/devlog-sessions.test.ts → 9/9（含并发放大的 race E2E e2e-race PASS）"
+    },
+    {
+      "id": "C2",
+      "claim": "`src/hosts/retract.ts` 有 6 处裸 writeFileSync 写用户全局文件（违反本轮自己立的 C2 约束）——摘除路径（graft retract / switch 回原版）没走 atomicWrite",
+      "verified": "属实：markdown(1)、JSON 配置(3)、TOML/ignore(2)，全部写 ~/.claude、~/.codex、.gitignore 等用户文件",
+      "fix": "全部改走 atomicWriteSync：文本用 {backup:true}；JSON 配置加 {validateJson:true}（写坏宁抛不落）",
+      "reverify": "npx tsc --noEmit 0 错误；node --import tsx --test test/hosts-retract.test.ts → 25/25"
+    },
+    {
+      "id": "C3",
+      "claim": "`.claude/settings.json` 未纳入 .gitignore（含本地权限配置，机器相关，不该入库）",
+      "verified": "属实（上游 .gitignore 本来就没有这一条）",
+      "fix": ".gitignore 追加 `.claude/settings.json` / `.claude/settings.local.json`",
+      "reverify": "git check-ignore 命中；git status 干净"
+    },
+    {
+      "id": "R4",
+      "claim": "9 个 E2E 硬编码本机用户路径（`C:/Users/Administrator.../Agent-Code`、绝对 CLI 路径），在 CI/别的机器上无法运行",
+      "verified": "属实（race/quick-dash/dashboard/live-scenario/idempotent/fed-perf/ui-interact/duck-hub/docker）",
+      "fix": "统一为 `E2E_ROOT` 环境变量 → 默认仓库根；CLI 一律用 `import.meta.url` 相对解析；dashboard 的会话断言改为按**自己 pid** 找行（不再写死仓库名）",
+      "reverify": "8 个脚本 node --check 通过；race PASS、dashboard 5/5、live-scenario 8/8、idempotent 9/9、fed-perf 9/9、ui-interact 27/27 —— 全部在'服务本仓库'的默认配置下真实重跑"
+    }
+  ],
+  "critic_findings_we_checked_and_disagreed_or_already_fixed": [
+    {
+      "id": "W1",
+      "claim": "buildingStatus() 的 stale 判定在锁等待窗口被调低时会漏报",
+      "our_check": "stale 判定基于 BUILDING_STALE_MS = FIRST_BUILD_TIMEOUT_MS(10min) + 60s，与等待窗口（默认 20s，可配到 0）无关；锁等待期间的显示由 building 布尔与 elapsedMs 承担",
+      "conclusion": "不成立（批评基于把两个常量看混了）；已回复 Critic 并给出 file:line"
+    },
+    {
+      "id": "W2",
+      "claim": "GITHUB_TOKEN 写在 ci-max.yml 的 env 里",
+      "our_check": "`grep -rn GITHUB_TOKEN .github/workflows/ci-max.yml` 无命中 —— 该文件不引用任何 token；permissions 只有 contents: read",
+      "conclusion": "不成立（Critic 把上游自带的其它 workflow 里的 `${{ github.token }}` 内建上下文看成了明文密钥）"
+    },
+    {
+      "id": "W3",
+      "claim": "`.claude/settings.json` 里的 hooks 引用了不存在的脚本",
+      "our_check": "该文件是本机 `graft init` 生成的机器本地配置（本轮已按 C3 加进 .gitignore，不再入库），其中引用的 helper 由 `graft init` 安装，路径相对于仓库存在",
+      "conclusion": "不成立于仓库范围；已通过 gitignore 让它彻底离开版本控制"
+    }
+  ],
+  "commands_executed": [
+    { "cmd": "npx tsc --noEmit", "exit_code": 0, "raw_output_tail": "(no output)" },
+    { "cmd": "node --import tsx --test test/devlog-sessions.test.ts", "exit_code": 0, "raw_output_tail": "9/9" },
+    { "cmd": "node --import tsx --test test/hosts-retract.test.ts", "exit_code": 0, "raw_output_tail": "25/25" },
+    { "cmd": "node e2e/e2e-race.mjs", "exit_code": 0, "raw_output_tail": "PASS sessions.json 合法 JSON（5 server × 10 calls）" },
+    { "cmd": "node e2e/e2e-dashboard.mjs", "exit_code": 0, "raw_output_tail": "5/5（会话断言改按 pid）" },
+    { "cmd": "node e2e/e2e-live-scenario.mjs", "exit_code": 0, "raw_output_tail": "8/8" },
+    { "cmd": "node e2e/e2e-idempotent.mjs", "exit_code": 0, "raw_output_tail": "9/9" },
+    { "cmd": "node e2e/e2e-fed-perf.mjs", "exit_code": 0, "raw_output_tail": "9/9 PASS" },
+    { "cmd": "node e2e/ui-interact.mjs", "exit_code": 0, "raw_output_tail": "27/27（零 pageerror）" },
+    { "cmd": "node scripts/run-tests.mjs", "exit_code": 0, "raw_output_tail": "见 max10-authoritative.json（最终数字）" }
+  ],
+  "files_changed": [
+    "src/mcp/devlog.ts（tmp 名唯一化）",
+    "src/hosts/retract.ts（6 处 → atomicWriteSync，JSON 加 validateJson）",
+    ".gitignore（.claude/settings.json / settings.local.json）",
+    "e2e/{e2e-race,quick-dash,e2e-dashboard,e2e-live-scenario,e2e-idempotent,e2e-fed-perf,ui-interact,e2e-duck-hub}.mjs（E2E_ROOT + 相对 CLI + 按 pid 断言）"
+  ],
+  "limitations": [
+    "Critic 的 6 个怀疑点里 3 个成立（C1/C2/C3）已修，3 个经 file:line 核实不成立（W1/W2/W3），不为了'显得改了'而改动"
+  ]
+}

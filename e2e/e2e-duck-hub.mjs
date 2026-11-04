@@ -8,8 +8,11 @@
 import { spawn } from 'node:child_process';
 import { get } from 'node:http';
 import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const REPO = 'C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/duck-2api/duck2api-hub';
+// [R4] 优先 E2E_ROOT；默认仍指本机的 duck2api-hub（它有 ccc 索引，别的机器没有就如实 FAIL）
+const REPO = process.env.E2E_ROOT ?? 'C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/duck-2api/duck2api-hub';
 const results = [];
 const check = (n, ok, d='') => { results.push(ok); console.log(`${ok?'PASS':'FAIL'}  ${n}  ${String(d).slice(0,130)}`); };
 const getJson = (p) => new Promise((res, rej) => get(`http://127.0.0.1:24688${p}`, r => { let b=''; r.on('data',d=>b+=d); r.on('end',()=>res(JSON.parse(b))); }).on('error', rej));
@@ -17,7 +20,7 @@ const getJson = (p) => new Promise((res, rej) => get(`http://127.0.0.1:24688${p}
 const hadGraph = existsSync(REPO + '/graft/.graph/wiring.json');
 console.log(`(测试前图谱已存在: ${hadGraph} — 无论哪种都继续验证)`);
 
-const c = spawn(process.execPath, ['D:/自研工具/graft-Max/dist/cli.js', 'mcp', REPO], { env: { ...process.env, GRAFT_MAX_LOG: '1', GRAFT_MAX_UI: '24688', GRAFT_MAX_MCP: '1' }, windowsHide: true });
+const c = spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'cli.js'), 'mcp', REPO], { env: { ...process.env, GRAFT_MAX_LOG: '1', GRAFT_MAX_UI: '24688', GRAFT_MAX_MCP: '1' }, windowsHide: true });
 c.stderr.on('data', ()=>{});
 let buf=''; const pend=new Map();
 c.stdout.on('data', d=>{ buf+=d; let i; while((i=buf.indexOf('\n'))>=0){ const l=buf.slice(0,i).trim(); buf=buf.slice(i+1); try{const m=JSON.parse(l); if(m.id&&pend.has(m.id)){pend.get(m.id)(m);pend.delete(m.id);}}catch{} } });

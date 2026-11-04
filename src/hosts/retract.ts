@@ -23,7 +23,14 @@
  *      contribution is deleted, not truncated to `{}` or a blank document —
  *      an orphan file is the very residue this exists to remove.
  */
-import { readFileSync, writeFileSync, existsSync, rmSync, rmdirSync, statSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, rmSync, rmdirSync, statSync, readdirSync } from 'node:fs';
+// [N2 补齐] 这个文件写的全是**用户全局文件**（~/.claude/CLAUDE.md、~/.claude.json、
+// codex 配置、.gitignore…）。原先 6 处裸 writeFileSync：进程被杀/磁盘满会把用户配置
+// 截断（历史上 .claude.json 从 246KB 被截成 852B）。内容一字不改，只改"怎么落盘"。
+// **不备份**（backup:false）：retract 是"卸载"，语义是"目录里只留用户的字"——
+// 留一个 .bak 反而破坏 `filesUnder(repo) === ['AGENTS.md']` 这条卸载契约
+// （单测抓到的真回归）。崩溃安全由 tmp+rename 本身保证，不靠 bak。
+import { atomicWriteSync } from '../util/atomic-write.js';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { HOSTS, hostRelPath } from './registry.js';
@@ -167,7 +174,7 @@ function stripSection(path: string, apply: boolean, markers: Markers[] = ALL_MAR
     .replace(/\n+$/, '\n');
   if (!apply) return isBlank(collapsed) ? 'deleted' : 'removed';
   if (isBlank(collapsed)) return removeFile(path, true);
-  writeFileSync(path, eol === '\n' ? collapsed : collapsed.replace(/\n/g, '\r\n'));
+  atomicWriteSync(path, eol === '\n' ? collapsed : collapsed.replace(/\n/g, '\r\n'), { backup: false });
   return 'removed';
 }
 
@@ -197,7 +204,7 @@ function removeJsonKey(path: string, topKey: string, apply: boolean): RetractAct
   for (const k of ours) delete map[k];
   if (Object.keys(map).length === 0) delete root[topKey];
   if (Object.keys(root).length === 0) return removeFile(path, true);
-  writeFileSync(path, `${JSON.stringify(root, null, 2)}\n`);
+  atomicWriteSync(path, `${JSON.stringify(root, null, 2)}\n`, { validateJson: true });
   return 'removed';
 }
 
@@ -216,7 +223,7 @@ function removeTomlSection(path: string, apply: boolean): RetractAction {
   if (!graft.found && !trail.found) return 'absent';
   if (!apply) return isBlank(kept) ? 'deleted' : 'removed';
   if (isBlank(kept)) return removeFile(path, true);
-  writeFileSync(path, kept.endsWith('\n') ? kept : `${kept}\n`);
+  atomicWriteSync(path, kept.endsWith('\n') ? kept : `${kept}\n`, { backup: false });
   return 'removed';
 }
 
@@ -272,7 +279,7 @@ function stripClaudeSettings(path: string, apply: boolean): RetractAction {
   if (after === before) return 'absent';
   if (!apply) return Object.keys(root).length === 0 ? 'deleted' : 'removed';
   if (Object.keys(root).length === 0) return removeFile(path, true);
-  writeFileSync(path, `${JSON.stringify(root, null, 2)}\n`);
+  atomicWriteSync(path, `${JSON.stringify(root, null, 2)}\n`, { validateJson: true });
   return 'removed';
 }
 
@@ -304,7 +311,7 @@ function stripHookEntries(path: string, apply: boolean, ours: string[] = []): Re
   const empty = Object.keys(root).every((k) => ours.includes(k));
   if (!apply) return empty ? 'deleted' : 'removed';
   if (empty) return removeFile(path, true);
-  writeFileSync(path, `${JSON.stringify(root, null, 2)}\n`);
+  atomicWriteSync(path, `${JSON.stringify(root, null, 2)}\n`, { validateJson: true });
   return 'removed';
 }
 
@@ -332,7 +339,7 @@ function stripIgnoreEntries(path: string, entries: RegExp[], apply: boolean): Re
   if (kept === text) return 'absent';
   if (!apply) return isBlank(kept) ? 'deleted' : 'removed';
   if (isBlank(kept)) return removeFile(path, true);
-  writeFileSync(path, kept.endsWith('\n') ? kept : `${kept}\n`);
+  atomicWriteSync(path, kept.endsWith('\n') ? kept : `${kept}\n`, { backup: false });
   return 'removed';
 }
 

@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO = process.env.E2E_ROOT ?? HERE;
 const CLI = join(HERE, '..', 'dist', 'cli.js');
 const require = createRequire('C:/Users/Administrator.DESKTOP-EGNE9ND/AppData/Roaming/npm/node_modules/');
 const { chromium } = require('playwright');

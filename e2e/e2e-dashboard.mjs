@@ -3,9 +3,11 @@
  * Verifies: sessions registry (who is using), stats, tail, HTML page.
  * Uses node:http directly against 127.0.0.1 (local, no proxy involvement).
  */
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { get } from 'node:http';
-import { fileURLToPath } from 'node:url';
+const REPO = process.env.E2E_ROOT ?? dirname(fileURLToPath(import.meta.url));
 
 function fetchLocal(url) {
   return new Promise((resolve, reject) => {
@@ -22,7 +24,7 @@ function fetchLocal(url) {
 // 从 stderr 拿真实端口（面板启动行就是这个），拿不到才退回期望值。
 const WANT_PORT = 24688 + (process.pid % 20);
 let uiPort = WANT_PORT;
-const c = spawn(process.execPath, [fileURLToPath(new URL('../dist/cli.js', import.meta.url)), 'mcp', 'C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code'], {
+const c = spawn(process.execPath, [fileURLToPath(new URL('../dist/cli.js', import.meta.url)), 'mcp', REPO], {
   env: { ...process.env, GRAFT_MAX_LOG: '1', GRAFT_MAX_UI: String(WANT_PORT) },
   windowsHide: true,
 });
@@ -42,7 +44,8 @@ const check = (name, ok, detail) => { results.push({ name, ok, detail }); consol
 setTimeout(async () => {
   try {
     const sess = JSON.parse((await fetchLocal(`http://127.0.0.1:${uiPort}/sessions`)).body);
-    check('/sessions shows live session', sess.length >= 1 && sess.some((s) => s.cwd.includes('Agent-Code') && s.requests >= 2), JSON.stringify(sess).slice(0, 200));
+    // [R4] 断言自己这个 server 的会话行（按 pid），而不是写死仓库名——脚本现在默认服务本仓库
+    check('/sessions shows live session', sess.some((s) => s.pid === c.pid && s.requests >= 2), JSON.stringify(sess.slice(0, 3)).slice(0, 200));
     const stats = JSON.parse((await fetchLocal(`http://127.0.0.1:${uiPort}/stats`)).body);
     check('/stats log bytes > 0', stats.logBytes > 0, JSON.stringify(stats));
     const tail = (await fetchLocal(`http://127.0.0.1:${uiPort}/tail?n=50`)).body;

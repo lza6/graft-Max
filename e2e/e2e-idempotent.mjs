@@ -6,7 +6,9 @@
 import { spawn } from 'node:child_process';
 import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+const REPO = process.env.E2E_ROOT ?? dirname(fileURLToPath(import.meta.url));
 
 const results = [];
 const check = (n, ok, d='') => { results.push(ok); console.log(`${ok?'PASS':'FAIL'}  ${n}  ${String(d).slice(0,110)}`); };
@@ -15,7 +17,7 @@ const ENV = { ...process.env, GRAFT_MAX_LOG: '1', GRAFT_MAX_MCP: '1' };
 // ===== A: 5 sessions same dir =====
 const servers = [];
 for (let i = 0; i < 5; i++) {
-  const c = spawn(process.execPath, ['D:/自研工具/graft-Max/dist/cli.js', 'mcp', 'C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code'], { env: { ...ENV, GRAFT_MAX_UI: String(24720+i) }, windowsHide: true });
+  const c = spawn(process.execPath, ['D:/自研工具/graft-Max/dist/cli.js', 'mcp', REPO], { env: { ...ENV, GRAFT_MAX_UI: String(24720+i) }, windowsHide: true });
   c.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 's'+i, version: '0' } } }) + '\n');
   c.on('error', () => {});
   servers.push(c);

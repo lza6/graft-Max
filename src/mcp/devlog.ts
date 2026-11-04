@@ -271,7 +271,10 @@ function writeSessions(rows: SessionRow[]): void {
     // [graft-Max] 同步原子写：多 server 并发 bump 时，async writeFile 交错会把
     // 文件截成 0 字节（实测发生过）。writeFileSync + 同目录 tmp + rename 原子替换。
     const clean = pruneDeadRows(rows);
-    const tmp = SESSIONS_FILE + '.tmp';
+    // [Critic C1] 临时文件名必须**每写一次都不同**：固定 `sessions.json.tmp` 时，
+    // 两个进程并发写会互相覆盖/互相 rename 对方的半成品（A 的 rename 可能拿到 B 写了一半的
+    // 内容）。pid + 随机后缀让每个写者只可能 rename 自己的 tmp。
+    const tmp = `${SESSIONS_FILE}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
     writeFileSync(tmp, JSON.stringify(clean, null, 1), 'utf8');
     renameSync(tmp, SESSIONS_FILE);
   } catch {

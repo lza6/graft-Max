@@ -6,9 +6,11 @@
  *   2. real-time log lines for every call
  * Probes the dashboard BEFORE, DURING, and AFTER tool calls.
  */
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { get } from 'node:http';
-import { fileURLToPath } from 'node:url';
+const REPO = process.env.E2E_ROOT ?? dirname(fileURLToPath(import.meta.url));
 
 // [N10 收尾] 端口从 stderr 读真实值：本机若已有实例占着预期端口，server 会自动 +1~+9，
 // 写死就会打到别人的面板上（e2e-dashboard 就被容器的 401 打回过）。
@@ -20,7 +22,7 @@ const getText = (p) => new Promise((res, rej) => get(`http://127.0.0.1:${uiPort}
 const results = [];
 const check = (name, ok, detail='') => { results.push(ok); console.log(`${ok?'PASS':'FAIL'}  ${name}  ${String(detail).slice(0,140)}`); };
 
-const c = spawn(process.execPath, [fileURLToPath(new URL('../dist/cli.js', import.meta.url)), 'mcp', 'C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code'], {
+const c = spawn(process.execPath, [fileURLToPath(new URL('../dist/cli.js', import.meta.url)), 'mcp', REPO], {
   env: { ...process.env, GRAFT_MAX_LOG: '1', GRAFT_MAX_UI: String(WANT_PORT) }, windowsHide: true,
 });
 c.stderr.on('data', (buf) => {
