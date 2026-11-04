@@ -33,8 +33,6 @@ import { homedir, hostname } from 'node:os';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-// [N8] 旧版内联页面：仅作兼容回退（GRAFT_MAX_UI_LEGACY=1 或 dist/panel 缺失）。
-import { legacyPage } from './panel-legacy.js';
 // [N9/N12] 联邦后端健康度：面板"联邦后端"卡的数据源。
 import { fedBackendHealth, getFedCacheStats, reprobeBackends, type FedBackendHealth } from './federation.js';
 // [N13/N14] 建图状态（子进程拥有 building.json，这里只读）。
@@ -236,6 +234,13 @@ interface ToolStat {
 }
 let toolStatsCache: { at: number; v: Record<string, ToolStat> } | null = null;
 
+/** [M7] /stats.errorRate 的形状：窗口行数、错误数、比率（4 位小数；0 行 → null）。 */
+export interface ErrorRate {
+  windowLines: number;
+  errors: number;
+  rate: number | null;
+}
+
 /** 最近秩法分位（p=50/95）：给定已排序数组，取第 ceil(p/100·n) 个。
  * 样本少时退化为最大值——一个调用也能给出数，不会返回 NaN。 */
 export function percentile(sortedAsc: number[], p: number): number {
@@ -250,9 +255,14 @@ async function toolStats(): Promise<Record<string, ToolStat>> {
   if (toolStatsCache && Date.now() - toolStatsCache.at < TOOLSTATS_TTL_MS) return toolStatsCache.v;
   const lines = await tailLines(800);
   const per = new Map<string, { durs: number[]; errors: number }>();
+  // [M7] 错误率趋势：复用同一次 tailLines 的解析，不二次读日志
+  let windowLines = 0;
+  let totalErrors = 0;
   for (const line of lines) {
     const m = /<--\s+(?:工具返回|tools\/call).*?\s(\S+)\s+(\d+)ms\s+isError=(true|false)/.exec(line);
     if (!m) continue;
+    windowLines++;
+    if (m[3] === 'true') totalErrors++;
     // normalize across spellings (max_/graft_/trail_/legacy aliases) so one
     // tool's calls aggregate on one row
     const name = m[1].replace(/^(max_|graft_|trail_)/, '').replace(/^ask$/, 'find_code');
@@ -274,7 +284,20 @@ async function toolStats(): Promise<Record<string, ToolStat>> {
     };
   }
   toolStatsCache = { at: Date.now(), v: out };
+  // [M7] 错误率挂在缓存旁，同一 TTL 一起刷新（与 toolStats 同一次解析）
+  errorRateCache = {
+    at: Date.now(),
+    v: { windowLines, errors: totalErrors, rate: windowLines > 0 ? Math.round((totalErrors / windowLines) * 10000) / 10000 : null },
+  };
   return out;
+}
+
+let errorRateCache: { at: number; v: ErrorRate } | null = null;
+/** [M7] 最近 800 行日志的工具返回错误率（与 toolStats 共享 TTL 与解析结果）。 */
+export async function errorRate(): Promise<ErrorRate> {
+  if (errorRateCache && Date.now() - errorRateCache.at < TOOLSTATS_TTL_MS) return errorRateCache.v;
+  await toolStats(); // 触发同一份解析（缓存会同时刷新两者）
+  return errorRateCache?.v ?? { windowLines: 0, errors: 0, rate: null };
 }
 
 function json(res: ServerResponse, code: number, body: unknown): void {
@@ -456,9 +479,11 @@ const PANEL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'panel');
 let panelHtmlCache: string | null = null;
 let panelWarned = false;
 
-/** 面板是否回退到旧版内联页：显式开关，或 dist/panel 还没构建（从 src 跑测试时）。 */
+/**
+ * [M4] 旧版内联页已删（max.11 兑现 max.10 的"一个 release 周期后清退"承诺）。
+ * 面板 HTML 只来自 dist/panel/index.html；缺失时给出可执行的修复命令，不再有第二套 UI。
+ */
 export function panelUsesLegacy(): boolean {
-  if (process.env.GRAFT_MAX_UI_LEGACY === '1') return true;
   return !existsSync(join(PANEL_DIR, 'index.html'));
 }
 
@@ -478,13 +503,17 @@ function readPanelAsset(name: 'index.html' | 'app.js' | 'style.css'): string | n
   }
 }
 
-/** 面板 HTML：新工程优先，缺失/显式回退时用 max.9 的内联版。 */
-function page(port = DEFAULT_PORT): string {
-  if (!panelUsesLegacy()) {
-    const html = readPanelAsset('index.html');
-    if (html !== null) return html;
-  }
-  return legacyPage(port, panelVersion());
+/** 面板 HTML：只有一份（dist/panel/index.html）。缺失 = 构建产物不完整，明说怎么修。 */
+function page(_port = DEFAULT_PORT): string {
+  const html = readPanelAsset('index.html');
+  if (html !== null) return html;
+  return `<!doctype html><html lang="zh"><meta charset="utf-8"><title>graft-Max Dashboard</title>
+<body style="font-family:system-ui;max-width:640px;margin:60px auto;line-height:1.8">
+<h2>面板资源缺失</h2>
+<p><code>dist/panel/index.html</code> 不存在——前端没有随包构建。修复：</p>
+<pre><code>npm run build:panel</code></pre>
+<p>（完整安装场景该文件在 <code>dist/panel/</code> 里随包发布；缺失说明安装不完整。）</p>
+</body></html>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -642,7 +671,7 @@ export function startDashboard(explicitPort?: number, root = process.cwd()): Ser
         res.end(page((server.address() as { port?: number } | null)?.port ?? port));
       } else if (url.pathname === '/app.js' || url.pathname === '/style.css') {
         // [N8] 面板静态资源（不回退内联：旧版页面自带内联 CSS/JS，不需要这两个 URL）
-        const body = panelUsesLegacy() ? null : readPanelAsset(url.pathname === '/app.js' ? 'app.js' : 'style.css');
+        const body = readPanelAsset(url.pathname === '/app.js' ? 'app.js' : 'style.css');
         if (body === null) {
           json(res, 404, { error: 'panel not built — run: npm run build:panel' });
           return;
@@ -716,6 +745,8 @@ export function startDashboard(explicitPort?: number, root = process.cwd()): Ser
           port: (server.address() as { port?: number } | null)?.port ?? port,
           // [graft-Max T9 + N9] per-tool 次数/平均/p50/p95/错误，喂"工具耗时"卡
           toolStats: await toolStats(),
+          // [M7] 错误率趋势（最近 800 行，复用 toolStats 的解析结果）
+          errorRate: await errorRate(),
           // [N9/N12] 联邦后端健康度 + 结果缓存命中率（P3-6）
           fedHealth,
           fedCache: getFedCacheStats(),

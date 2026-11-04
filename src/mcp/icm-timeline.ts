@@ -19,10 +19,10 @@
  *   - `GRAFT_MAX_ICM=2`  干跑模式：只计数、不 spawn（单测与 E2E 用）
  *   - `GRAFT_TEST=1`     同上（E2E 脚本统一开的静默位）
  */
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
-import { GRAFT_MAX_HOME } from './devlog.js';
+import { GRAFT_MAX_HOME, tightenPerms } from './devlog.js';
 
 /** 一批最多攒多少行（够了就立刻 flush，不等定时器）。 */
 const BATCH_LINES = 32;
@@ -61,6 +61,8 @@ export interface IcmTimelineStats {
 }
 
 let buffer: string[] = [];
+/** [M9] JSONL 首次创建后收过权限就不重复 chmod。 */
+let permsDone = false;
 let lastFlushAt = 0;
 let inFlight: Promise<void> | null = null;
 const stats: IcmTimelineStats = {
@@ -103,6 +105,11 @@ export function recordTimeline(tool: string, args: unknown, ms: number, isError:
   try {
     mkdirSync(GRAFT_MAX_HOME, { recursive: true });
     appendFileSync(timelinePath(), line + '\n', 'utf8');
+    // [M9] JSONL 是跨项目的工具调用史，首次创建后收紧权限（POSIX 0600；Windows no-op）。
+    if (!permsDone && existsSync(timelinePath())) {
+      permsDone = true;
+      tightenPerms(timelinePath());
+    }
     stats.lines += 1;
   } catch {
     /* 磁盘满/权限 → 丢这一行的本地副本，继续走内存缓冲 */

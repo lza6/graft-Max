@@ -62,6 +62,7 @@ interface BuildInfo {
   startedAt?: string;
   elapsedMs?: number;
   stale?: boolean;
+  progress?: { elapsedMs?: number; bytesSoFar?: number };
 }
 
 interface FreshInfo {
@@ -92,6 +93,8 @@ interface Stats {
   building: BuildInfo[];
   roots: string[];
   toolStats: Record<string, ToolStat>;
+  /** [M7] 错误率趋势（最近 800 行工具返回；rate 为 null 表示窗口内没有工具调用） */
+  errorRate?: { windowLines: number; errors: number; rate: number | null };
   fedHealth: FedHealth[];
   fedCache: CacheStats;
 }
@@ -412,14 +415,32 @@ async function loadStats(): Promise<Stats> {
   a.textContent = `127.0.0.1:${s.port}`;
   a.href = url;
   $('cRequests').textContent = String(s.requests);
-  $('sRequests').textContent = s.requests > 0 ? '本进程启动以来' : '还没有工具调用';
+  // [M7] KPI 副标题展示错误率趋势；>10% 时整张卡标 warn（红一下让人看见）
+  const er = s.errorRate;
+  const sub = $('sRequests');
+  const kpi = $('cRequests').closest('.kpi');
+  if (er && er.rate !== null && s.requests > 0) {
+    const pct = (er.rate * 100).toFixed(1);
+    sub.textContent = `错误率 ${pct}%（最近 ${er.windowLines} 次）`;
+    kpi?.classList.toggle('warn', er.rate > 0.1);
+  } else {
+    sub.textContent = s.requests > 0 ? '本进程启动以来' : '还没有工具调用';
+    kpi?.classList.remove('warn');
+  }
   const building = (s.building ?? []).filter((b) => !b.stale);
   const cB = $('cBuilding');
   cB.textContent = building.length > 0 ? `建图中 · ${building.length}` : '空闲';
   $('kpiBuild').className = `kpi ${building.length > 0 ? 'warn' : 'ok'}`;
   $('sBuilding').textContent =
     building.length > 0
-      ? `正在解析：${shortRepo(building[0].root)} · 已 ${Math.max(1, Math.round((building[0].elapsedMs ?? 0) / 1000))}s`
+      ? (() => {
+          const b = building[0];
+          const secs = Math.max(1, Math.round((b.elapsedMs ?? 0) / 1000));
+          // [M5] 产物体积增长曲线（非文件级 X/Y）：bytes 存在时追加"产物 X KB/MB"
+          const bytes = b.progress?.bytesSoFar;
+          const size = bytes === undefined ? '' : bytes >= 1024 * 1024 ? ` · 产物 ${(bytes / 1024 / 1024).toFixed(1)}MB` : ` · 产物 ${Math.round(bytes / 1024)}KB`;
+          return `正在解析：${shortRepo(b.root)} · 已 ${secs}s${size}`;
+        })()
       : '图谱已就绪';
   $('cLog').innerHTML = `${(s.logBytes / 1024).toFixed(1)} <small>KB</small>`;
   $('sLog').textContent = s.rotated ? '已滚动过（mcp.log.1 存在）' : '超过 5MB 自动滚动';

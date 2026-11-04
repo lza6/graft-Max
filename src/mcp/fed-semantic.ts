@@ -59,7 +59,21 @@ export async function runSemanticSearch(
   }
   let parsed: { results?: CccResult[]; success?: boolean };
   try {
-    parsed = JSON.parse(r.out.trim().split('\n').filter((l) => l.startsWith('{')).join('\n') || '{}');
+    // [M13 修复] 两步解析，顺序有讲究：
+    //   1. 先试**整体** parse——守护进程首启消息（"daemon starting..."）整段都不是
+    //      JSON，必须走 catch 透传给用户看。旧实现先按行 filter 出 `{` 开头的行再
+    //      parse，全是非 JSON 行时 filter 结果是空串 → `|| '{}'` → parsed={} →
+    //      静默变成"no hits"，catch 分支（透传）永远不会触发——实测就是这条
+    //      死路径让"装完 ccc 首次搜索"的用户看到假性的零结果。
+    //   2. 整体失败再按行捞 `{` 开头的行——JSON 混着噪声行（进度条等）的场景。
+    //   3. 还是不行才透传可读文本。
+    const raw = r.out.trim();
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const jsonLines = raw.split('\n').filter((l) => l.startsWith('{')).join('\n');
+      parsed = jsonLines ? JSON.parse(jsonLines) : (() => { throw new Error('non-json'); })();
+    }
   } catch {
     // Non-JSON output (daemon first-boot messages etc.): pass the readable text through.
     return { text: r.out.trim() || r.err.trim() || `no hits for: ${query}`, isError: !r.ok };

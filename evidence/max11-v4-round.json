@@ -1,0 +1,52 @@
+{
+  "task_id": "max11-v4-round",
+  "title": "v4.0 轮（M 系列）交付证据：M8/M7/M9/M10/M5/M4/M13/M14/M15 + CI 治理",
+  "status": "done",
+  "timestamp": "2026-11-04T13:30:00+08:00",
+  "version": "0.28.0-max.11",
+  "commands_executed": [
+    { "cmd": "node --import tsx --test test/devlog-redact.test.ts", "exit_code": 0, "raw_output_tail": "7/7 —— 5 类密钥掩码（sk-/ghp_/AKIA/xox/Bearer/kv）、不误伤（普通代码/短串）、dlog+dlogBlock 都过脱敏、GRAFT_MAX_LOG_REDACT=0 可关、幂等" },
+    { "cmd": "node --import tsx --test test/fed-semantic.test.ts", "exit_code": 0, "raw_output_tail": "7/7 —— E2/E10/E11 软错误、两段式输出（L1-3 格式）、limit≤20 夹紧、lang/path 透传、非 JSON 透传（抓到并修复实现死路径：filter 后空串走 '{}' 静默 no-hits）" },
+    { "cmd": "node --import tsx --test test/atomic-write.test.ts", "exit_code": 0, "raw_output_tail": "12/12 ×5 轮 —— 异步版 4 用例 + 并发 rename EPERM 复现并修复（短退避重试 ≤8）" },
+    { "cmd": "node --import tsx --test test/build-progress.test.ts test/first-build-wait.test.ts", "exit_code": 0, "raw_output_tail": "10/10 —— progress 采样（worker 线程 500ms）、抛错也写终值、P3-9 契约不回退" },
+    { "cmd": "node --import tsx --test test/devlog-privacy.test.ts test/dashboard-error-rate.test.ts", "exit_code": 0, "raw_output_tail": "hostCmd 白名单化（无密钥值/内网路径）、errorRate 0.3=3/10、TTL、空窗口 null（2 skipped：Windows 上 chmod no-op）" },
+    { "cmd": "node scripts/check-coverage.mjs", "exit_code": 0, "raw_output_tail": "8 自研文件全 PASS：语句最低 91.05%、分支最低 70.49%（门禁 80/70）—— fed-semantic 从 58%→98.15%/82.86%" },
+    { "cmd": "node e2e/e2e-fed-shape.mjs", "exit_code": 0, "raw_output_tail": "16/16 —— 全不装（联邦工具全隐藏+六件套在）/全装假后端（三联邦工具都在，ccc 需 .cocoindex_code）/fedHealth 直测形状" },
+    { "cmd": "node e2e/e2e-fed-perf.mjs ; node e2e/e2e-dashboard.mjs ; node e2e/e2e-backend-hotplug.mjs ; node e2e/panel-load.mjs", "exit_code": 0, "raw_output_tail": "9/9 ; 5/5 ; 9/9 ; 10/10 —— 新代码上无回归" },
+    { "cmd": "node e2e/e2e-ci-smoke.mjs ; node e2e/ui-interact.mjs", "exit_code": 0, "raw_output_tail": "24/24 ; 27/27（含错误率副标题与产物曲线的新 KPI 断言环境）" },
+    { "cmd": "npm pack --ignore-scripts + npm i -g --prefix <空目录>", "exit_code": 0, "raw_output_tail": "graft-max-0.28.0-max.11.tgz；全局安装 → --version 0.28.0-max.11；dist/panel 3 文件在包里" },
+    { "cmd": "npm run build ; node dist/cli.js --version", "exit_code": 0, "raw_output_tail": "0.28.0-max.11；panel 18.2KB" }
+  ],
+  "files_changed": [
+    "src/mcp/devlog.ts (M8 脱敏 redact() 7 规则 + dlog/dlogBlock 接线 + tightenPerms + M10 hostCmd 白名单化)",
+    "src/mcp/icm-timeline.ts (M9 JSONL chmod 接线)",
+    "src/mcp/fed-semantic.ts (修复非 JSON 输出死路径 + 保持两步解析)",
+    "src/util/atomic-write.ts (Windows rename EPERM/EACCES 短退避重试 ≤8，sync+async 两版)",
+    "src/claude/sync-run.ts (M5 progress：worker 线程 500ms 采样 .graph 产物字节，终值同步写)",
+    "src/graph/refresh.ts (buildingStatus 透传 progress)",
+    "src/mcp/dashboard.ts (M4 删 legacyPage 依赖；单源 page() + 缺失修复提示页)",
+    "panel/main.ts (M7 错误率副标题 + >10% 标红；M5 建图卡产物体积)",
+    "package.json (0.28.0-max.11)",
+    ".github/workflows/ci.yml (M13 skills-credit 文件级失败重跑——断言零改动)",
+    ".github/workflows/ci-max.yml (M13 覆盖率门禁步骤)",
+    "scripts/check-coverage.mjs (new)",
+    "test/devlog-redact.test.ts (new 7)",
+    "test/fed-semantic.test.ts (new 7)",
+    "test/build-progress.test.ts (new 4)",
+    "test/devlog-privacy.test.ts (new 2)",
+    "test/dashboard-error-rate.test.ts (new 3)",
+    "test/atomic-write.test.ts (+4 async)",
+    "e2e/e2e-fed-shape.mjs (new 16)",
+    "README.md / CHANGELOG.md (新特性与两个新开关)"
+  ],
+  "honest_notes": [
+    "M5 的 progress 是**产物体积增长曲线**，不是文件级 X/Y——文件级计数需要改 src/graph/build.ts（上游热路径），指南的'若 build 侧能提供'条件不满足，README/CHANGELOG 都如实标注",
+    "两个 Builder 产出（M5/M7/M9/M10）经主控独立复跑验证 + 补了它们没做的 icm-timeline chmod 接线",
+    "全量 npm test 在本轮出现过 2 个并发 flaky（单跑各 3×3 全绿）——skills-credit 已有文件级重跑兜底，mcp-tools/claude-codex-pre-bash 两个文件列入观察",
+    "M0（max.10 轮）独立审查已在上一轮闭环；本轮的 M11（上游同步）无新上游提交、M3（E2E 矩阵）部分=新增 fed-shape + 覆盖率门禁入 CI、M6/M12（多标签页/SSE、收敛 federation.ts 行数）按指南属于 P3 观察项未启动"
+  ],
+  "limitations": [
+    "npm publish / Docker Hub 仍 blocked（无账号）——打包/安装/viz 全部本地闭环验证",
+    "M9 权限收紧在 Windows 上是 no-op（ACL 模型不同），单测 2 条 skipped 是如实的平台标注"
+  ]
+}

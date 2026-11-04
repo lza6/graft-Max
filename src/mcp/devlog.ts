@@ -15,8 +15,8 @@
  *     alive) are pruned on read, so crashed servers don't haunt the list.
  */
 import { appendFile, mkdir, rename, readFile, writeFile, stat, unlink } from 'node:fs/promises';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, chmodSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { homedir, userInfo, hostname } from 'node:os';
 
 export const GRAFT_MAX_HOME = join(homedir(), '.graft-max');
@@ -29,6 +29,21 @@ const RETAIN_DAYS = 14;
 let enabled = !!process.env.GRAFT_MAX_LOG && process.env.GRAFT_MAX_LOG !== '0';
 let target = process.env.GRAFT_MAX_LOG && process.env.GRAFT_MAX_LOG !== '1' ? process.env.GRAFT_MAX_LOG : DEFAULT_LOG;
 let ensured = false;
+/** [M9] 权限收紧只在每个文件首次写后做一次（进程内记忆，不反复 stat/chmod）。 */
+let logPermDone = false;
+let sessionsPermDone = false;
+
+/** [M9 · P2] 日志/会话文件权限收紧到 0600（仅 POSIX）。
+ * Windows 的 ACL 模型不同（chmod 意义有限），no-op；失败静默——
+ * 收紧失败不能拖垮日志与会话注册。 */
+export function tightenPerms(path: string): void {
+  if (process.platform === 'win32') return;
+  try {
+    chmodSync(path, 0o600);
+  } catch {
+    /* best effort */
+  }
+}
 
 export function isLogEnabled(): boolean {
   return enabled;
@@ -92,6 +107,12 @@ async function write(line: string): Promise<void> {
       void pruneOldEntries();
     }
     await appendFile(target, line + '\n', 'utf8');
+    // [M9] 首次写入后收紧权限（仅 POSIX；Windows 上 no-op）。失败静默——
+    // 权限收紧绝不能拖垮日志本身。
+    if (!logPermDone) {
+      logPermDone = true;
+      tightenPerms(target);
+    }
     void rotateIfNeeded();
   } catch {
     /* logging never takes the server down */
@@ -134,9 +155,73 @@ function i18n(line: string): string {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// [M8 · P1] 日志脱敏。
+//
+// 为什么必须有：`/tail` 把 mcp.log 原文吐给浏览器（面板默认免令牌=本机任何页面
+// 都能 fetch），而日志里记的是**工具的完整入参与输出原文**——任何进过一次调用的
+// API key / token 就会永远躺在盘上、且可被网页读取。
+//
+// 红线（三选一的保守策略）：
+//   1. 只匹配**明显密钥形态**（有已知前缀/长度约束），绝不碰普通代码、路径、
+//      短串——误伤会毁掉日志的排障价值，比泄密更常发生；
+//   2. 掩码保留**前 4 字符**，人工比对"是哪把钥匙泄露过"仍然可行；
+//   3. `GRAFT_MAX_LOG_REDACT=0` 一键关（排障时确实需要看原文）。
+// ---------------------------------------------------------------------------
+
+/** 掩码是否启用（默认开；GRAFT_MAX_LOG_REDACT=0 关）。进程内缓存。 */
+let redactOn: boolean | null = null;
+function redactionEnabled(): boolean {
+  if (redactOn === null) {
+    const v = process.env.GRAFT_MAX_LOG_REDACT;
+    redactOn = !(v === '0' || v === 'false');
+  }
+  return redactOn;
+}
+
+const REDACT_RULES: Array<[RegExp, (m: string, groups: string[]) => string]> = [
+  // OpenAI / Anthropic 风格：sk- 前缀 + ≥16 个 [A-Za-z0-9_-]
+  [/\bsk-[A-Za-z0-9_-]{16,}/g, (m) => `${m.slice(0, 4)}***`],
+  // GitHub: ghp_ / gho_ / ghs_ / ghu_
+  [/\bgh[posu]_[A-Za-z0-9]{16,}/g, (m) => `${m.slice(0, 4)}***`],
+  [/\bgithub_pat_[A-Za-z0-9_]{20,}/g, (m) => `${m.slice(0, 11)}***`],
+  // AWS access key id
+  [/\bAKIA[0-9A-Z]{16}\b/g, (m) => `${m.slice(0, 4)}***`],
+  // Slack: xox[baprs]-…
+  [/\bxox[baprs]-[A-Za-z0-9-]{20,}/g, (m) => `${m.slice(0, 4)}***`],
+  // Bearer 头
+  [/\bBearer\s+[A-Za-z0-9._~+/=-]{12,}/g, (m) => `${m.slice(0, 10)}***`],
+  // 键值对：api_key=/token:/password= …值为 ≥10 的连续串（键名不区分大小写）
+  [/\b(api[_-]?key|apikey|token|secret|password|passwd|pwd)(\s*[:=]\s*)["']?([A-Za-z0-9._~+/=-]{10,})/gi,
+    (m, g) => `${g[0]}${g[1]}${g[2].slice(0, 4)}***`],
+];
+
+/** 掩码一个字符串。永不 throw；已含 *** 的串原样返回（幂等）。 */
+export function redact(text: string): string {
+  if (!redactionEnabled()) return text;
+  if (text.includes('***')) return text;
+  let out = text;
+  for (const [re, rep] of REDACT_RULES) {
+    out = out.replace(re, (...args: unknown[]) => {
+      const m = args[0] as string;
+      const groups = args.slice(1, -2).map((x) => (typeof x === 'string' ? x : ''));
+      try {
+        return rep(m, groups);
+      } catch {
+        return m; // 规则自身的错误不放大成日志层的故障
+      }
+    });
+  }
+  return out;
+}
+
+export function __resetRedactCacheForTest(): void {
+  redactOn = null;
+}
+
 export function dlog(msg: string): void {
   if (!enabled) return;
-  void write(`[${stamp()}] ${i18n(msg)}`);
+  void write(`[${stamp()}] ${redact(i18n(msg))}`);
 }
 
 export function dlogBlock(title: string, body: string): void {
@@ -145,7 +230,8 @@ export function dlogBlock(title: string, body: string): void {
   // 于是 `--> tools/call …` / `<-- tools/call (graft) …` 这些标题永远是英文，
   // 而对应的 I18N 规则看起来"永远匹配不上"，被误判成死代码删掉。
   // body 是工具原始输出，**不翻译**（翻译代码片段会毁掉可读性与可复制性）。
-  void write(`[${stamp()}] ${i18n(title)}\n${clip(body)}\n`);
+  // [M8] 标题与 body 都过脱敏：只掩密钥形态的串，代码/路径/结构原样（可 grep 可复制）。
+  void write(`[${stamp()}] ${redact(i18n(title))}\n${clip(redact(body))}\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -276,7 +362,13 @@ function writeSessions(rows: SessionRow[]): void {
     // 内容）。pid + 随机后缀让每个写者只可能 rename 自己的 tmp。
     const tmp = `${SESSIONS_FILE}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
     writeFileSync(tmp, JSON.stringify(clean, null, 1), 'utf8');
+    // [M9] tmp 先收紧再 rename，保证最终文件就是 0600（rename 保留 tmp 的 mode）
+    tightenPerms(tmp);
     renameSync(tmp, SESSIONS_FILE);
+    if (!sessionsPermDone) {
+      sessionsPermDone = true;
+      tightenPerms(SESSIONS_FILE);
+    }
   } catch {
     /* best effort */
   }
@@ -324,8 +416,18 @@ export function registerSession(root: string, version: string): void {
 }
 
 function shortHostCmd(): string {
+  // [M10 · P2] 隐私：sessions.json 会被面板 /sessions 展示，完整命令行可能带
+  // 密钥参数（--token=…）、内网路径。只保留**可执行文件名**：
+  //   - Windows 路径常含空格且整体带引号 → 优先取首引号段；
+  //   - 否则按空格取第一个 token，再取 basename（吃掉路径前缀）。
+  // 长度截 60，足够放 "python3.11.exe" / "Code.exe" 这类名字。
   try {
-    return (process.env.COMMAND_LINE ?? process.title ?? '').slice(0, 120);
+    const cmdline = process.env.COMMAND_LINE ?? process.title ?? '';
+    let first: string;
+    const q = cmdline.match(/^"([^"]+)"/);
+    if (q) first = q[1];
+    else first = cmdline.trim().split(/\s+/)[0] ?? '';
+    return basename(first).slice(0, 60);
   } catch {
     return '';
   }

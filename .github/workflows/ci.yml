@@ -54,8 +54,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # M13-flaky 治理：skills-credit 系列有一个已知计时型 flaky（"4.14 step 1 wired"，
+      # fold 与 creditWindow 之间的注入时序窗口，实测 1/20 次频率、单文件重跑必绿）。
+      # 这里的重跑是**文件级**的：断言一个没改、失败语义不放宽——同一份测试文件在
+      # 空闲 runner 上再跑一遍，仍失败才算真红。观察两个 release 周期，若根因定位
+      # （fold/creditWindow 的锁等待在慢盘上的窗口）再回测试代码里修。
       - name: Test
         run: npm test
+
+      - name: Re-run known-flaky file once on failure (skills-credit)
+        if: failure()
+        run: |
+          echo "First run failed. Re-running the known-flaky file alone (assertions unchanged)."
+          node --import tsx --test test/skills-credit-1b-review.test.ts test/skills-credit-1b.test.ts test/skills-credit-2.test.ts test/skills-credit.test.ts
 
   node24-wasm:
     name: Node 24 WASM regression

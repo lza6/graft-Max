@@ -3,6 +3,51 @@
 所有重要改动记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循语义化：`0.28.0-max.N`（上游版本-max 补丁位）。
 
+## [0.28.0-max.11] — 2026-11
+
+> 本轮对应 `改进计划/下一步改进指南.md` v4.0 的 M 系列（M0–M15 中可执行的全部）。
+
+### 安全
+
+- **日志落盘前自动脱敏（M8 · P1）**：`dlog`/`dlogBlock` 写盘前把明显密钥形态的串
+  （`sk-…`/`ghp_…`/`github_pat_…`/`AKIA…`/`xox…`/`Bearer …`/`api_key=/token=/password=` 等）
+  掩码成 `前4字符***`。`/tail` 会把日志吐给浏览器（回环默认免令牌），日志不该成为密钥的
+  第二个家。只脱密钥、不碰代码/路径（误伤比泄密更常见）；`GRAFT_MAX_LOG_REDACT=0` 关。
+- **hostCmd 白名单化（M10）**：sessions.json 不再存完整命令行（可能带密钥参数与内网路径），
+  只存可执行文件名（截 60）。
+- **POSIX 权限收紧（M9）**：`mcp.log` / `sessions.json` / `tool-timeline.jsonl` 首次创建后
+  chmod 0600（Windows no-op）。同机其他用户不可读。
+
+### 新增
+
+- **建图产物体积曲线（M5）**：`building.json` 加 `progress`（每 500ms 采样 `.graph` 产物
+  字节数，worker 线程实现——execFileSync 会堵死主线程，setInterval 一次都跑不到），
+  面板建图卡显示"已 Ns · 产物 X KB"。**诚实标注**：不是文件级 X/Y——文件级计数需要改
+  `src/graph/build.ts`（上游热路径），本轮按指南"不做什么"跳过。
+- **/stats 错误率趋势（M7）**：`errorRate: { windowLines, errors, rate }`（复用 toolStats
+  的同一次日志解析，不二次读盘）；面板 KPI 显示"错误率 X.X%（最近 N 次）"，>10% 标红。
+- **覆盖率门禁落地（M13）**：自研 8 文件实测——语句最低 91.1%、分支最低 70.5%（达标 80/70）；
+  补 `fed-semantic` 契约测试（此前 58%→97%）与 `atomicWrite` 异步版 4 用例。
+- **fedHealth 形状 E2E（M14）**：后端全不装/全装（假二进制）两端的 tools/list 形状 + 直测
+  `fedBackendHealth()` 的字段契约（`e2e/e2e-fed-shape.mjs` 16/16）。
+
+### 修复
+
+- **fed-semantic 非 JSON 输出被静默当成零结果（真 bug）**：旧实现先按行 filter 出 `{` 开头
+  的行再 JSON.parse，"daemon starting..." 这类守护进程首启消息被过滤成空串 → `'{}'` →
+  显示"no hits"。改为先整体 parse（失败再按行捞、再透传）——catch 分支此前是死路径。
+- **atomicWrite 并发 rename 的 Windows EPERM（真 bug）**：多进程写 sessions.json 时
+  rename 目标冲突（几毫秒窗口）直接抛错。现在短退避重试 ≤8 次（tmp 唯一，重试不可能
+  覆盖别人），其余错误照旧 rethrow。
+- **M4 · 删除 panel-legacy**：max.10 承诺的"一个 release 周期后清退"兑现，-390 行死代码。
+
+### 测试
+
+- 新增 `test/devlog-redact.test.ts`（7）、`fed-semantic.test.ts`（6）、`build-progress.test.ts`（4）、
+  `devlog-privacy.test.ts`（2）、`dashboard-error-rate.test.ts`（3）、`e2e/e2e-fed-shape.mjs`（16）。
+- CI flaky 治理：`.github/workflows/ci.yml` 对 skills-credit 系列加**文件级失败重跑**
+  （断言零改动，语义不放宽）。
+
 ## [0.28.0-max.10] — 2026-11
 
 > 本轮对应 `改进计划/下一步改进指南.md` v3.0 的 **N0–N20 全量 21 张卡**（批次 A→E）。

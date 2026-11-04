@@ -79,6 +79,11 @@ jobs:
       - name: E2E smoke (real MCP stdio, temp repo)
         run: node e2e/e2e-ci-smoke.mjs
 
+      # [M13] 覆盖率门禁：自研文件（policy.md §1 的清单写死在脚本里）
+      # 语句 ≥80% / 分支 ≥70%。数据来自真实 node:test coverage，不是估算。
+      - name: Coverage gate (self-dev files)
+        run: node scripts/check-coverage.mjs
+
       # 全量单测在 ci.yml 里已经对两个 OS 都跑过；这里只在 Linux 上复跑一遍，
       # 保证"Max 改动没有把上游测试打红"这条结论在本 workflow 里也自证一次。
       - name: Unit tests (ubuntu only)

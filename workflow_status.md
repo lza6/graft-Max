@@ -156,6 +156,27 @@ graft-max viz --port ..  / => 200 2417B ; /app.js => 200 35825B
 
 SOP 落地：`docs-selfdev/上游同步SOP.md`（热路径 10 文件清单、步骤、判定标准、4 条反模式、本次记录）。
 
+## 7.5 v4.0 轮（max.11 · M 系列）—— 已交付
+
+| 任务 | 状态 | 证据 |
+|------|------|------|
+| M0 独立审查 | 上轮已 Approve（R4/R5） | §8 |
+| M4 删 panel-legacy | done（-390 行死代码，单源 page() + 修复提示页） | `git rm`；ui-interact 27/27 |
+| M5 建图产物曲线 | done（worker 线程 500ms 采样；**非文件级 X/Y**——build.ts 是上游热路径，如实标注） | test/build-progress 4/4 |
+| M7 错误率趋势 | done（/stats.errorRate，复用同一次日志解析） | test/dashboard-error-rate 3/3 |
+| M8 日志脱敏（P1） | done（7 规则，GRAFT_MAX_LOG_REDACT=0 可关） | test/devlog-redact 7/7 |
+| M9 权限收紧 | done（POSIX 0600 ×3 文件；Windows no-op 如实 skip） | test/devlog-privacy |
+| M10 hostCmd 白名单 | done（只存可执行名） | 同上 |
+| M13 覆盖率门禁 | done（scripts/check-coverage.mjs 入 CI；8 文件实测全 PASS） | 命令输出 |
+| M13 CI flaky 治理 | 部分（skills-credit 文件级重跑入 ci.yml，断言零改动；mcp-tools/claude-codex-pre-bash 各 1 次并发 flaky 入观察） | CI 日志 |
+| M14 fedHealth 形状 | done（全不装/全装两端 + 直测，16/16） | e2e/e2e-fed-shape.mjs |
+| M15 打包 | done（max.11 tarball 全局安装验证） | 命令输出 |
+| M1/M2/M17 发布 | blocked（无 npm/Docker Hub 账号） | — |
+| M3/M6/M12 | 未启动（P3 观察项/大改，指南允许按需） | — |
+
+**额外修复的真 bug（本轮发现）**：fed-semantic 非 JSON 输出死路径（filter 空→'{}'→假性 no-hits）；
+atomicWrite 并发 rename EPERM（Windows 多进程写 sessions.json 真实发生）。
+
 ## 8. 独立审查（状态：部分完成，如实记录）
 
 | 项 | 事实 |

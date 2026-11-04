@@ -428,6 +428,8 @@ export interface BuildingStatus {
   pid?: number;
   /** 状态文件还在但已超过建图硬超时 + 60s → 视为陈旧（子进程被 kill 时不会自己清理）。 */
   stale?: boolean;
+  /** [M5] 建图进度：产物体积增长曲线（非文件级 X/Y），由建图进程写进 building.json。 */
+  progress?: { elapsedMs?: number; bytesSoFar?: number };
 }
 
 /** 建图子进程的硬超时 + 1 分钟宽限；超过这个时间的 building.json 一定是残留。 */
@@ -437,11 +439,17 @@ export function buildingStatus(root: string, contextDir?: string): BuildingStatu
   const marker = join(contextDirFor(root, contextDir), '.graph', 'building.json');
   try {
     if (!existsSync(marker)) return { building: false, root };
-    const raw = JSON.parse(readFileSync(marker, 'utf8')) as { startedAt?: string; pid?: number; root?: string };
+    const raw = JSON.parse(readFileSync(marker, 'utf8')) as {
+      startedAt?: string; pid?: number; root?: string;
+      progress?: { elapsedMs?: number; bytesSoFar?: number };
+    };
     const t = raw.startedAt ? Date.parse(raw.startedAt) : NaN;
     const elapsedMs = Number.isFinite(t) ? Date.now() - t : undefined;
     const stale = elapsedMs !== undefined && elapsedMs > BUILDING_STALE_MS;
-    return { building: !stale, root: raw.root ?? root, startedAt: raw.startedAt, elapsedMs, pid: raw.pid, stale };
+    return {
+      building: !stale, root: raw.root ?? root, startedAt: raw.startedAt, elapsedMs, pid: raw.pid, stale,
+      ...(raw.progress ? { progress: raw.progress } : {}),
+    };
   } catch {
     return { building: false, root };
   }

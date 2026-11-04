@@ -62,7 +62,17 @@ export async function atomicWrite(path: string, data: string, opts: AtomicWriteO
   try {
     await fs.writeFile(tmp, data, encoding);
     await fsyncBestEffortAsync(tmp);
-    await fs.rename(tmp, path);
+    let attempt = 0;
+    for (;;) {
+      try {
+        await fs.rename(tmp, path);
+        break;
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if ((code !== 'EPERM' && code !== 'EACCES') || ++attempt > RENAME_RETRY_MAX) throw err;
+        await new Promise((r) => setTimeout(r, RENAME_RETRY_MS));
+      }
+    }
   } catch (err) {
     try { await fs.rm(tmp, { force: true }); } catch { /* tmp 已经不在：忽略 */ }
     throw err;
@@ -102,14 +112,35 @@ async function readPrevAsync(
 /**
  * 核心：同目录写 tmp → fsync（尽力而为，某些文件系统/杀毒软件会拒绝）→ rename。
  * rename 失败 = 原文件完好无损，只留下一个 tmp 需要清理。
+ *
+ * [M13] Windows 的 rename 在目标正被另一个 rename 占用的瞬间会抛 EPERM/EACCES
+ * （几毫秒的窗口，多进程写 sessions.json 时真实发生，实测并发 8 路必现一次）。
+ * 这类错误**短退避重试**是安全的：tmp 是唯一的，重试不可能覆盖别人的写入；
+ * 其余错误（文件被锁死、权限缺失）重试也不会好，立即 rethrow。
+ * 总预算 ~80ms，远小于任何一次真实的写放大。
  */
+const RENAME_RETRY_MS = 10;
+const RENAME_RETRY_MAX = 8;
+
 function replaceViaTmp(path: string, data: string, encoding: BufferEncoding): void {
   mkdirSync(dirname(path), { recursive: true });
   const tmp = tmpName(path);
   try {
     writeFileSync(tmp, data, encoding);
     fsyncBestEffort(tmp);
-    renameSync(tmp, path);
+    let attempt = 0;
+    for (;;) {
+      try {
+        renameSync(tmp, path);
+        return;
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        const retryable = code === 'EPERM' || code === 'EACCES';
+        if (!retryable || ++attempt > RENAME_RETRY_MAX) throw err;
+        const spinUntil = Date.now() + RENAME_RETRY_MS;
+        while (Date.now() < spinUntil) { /* 忙等几毫秒：比 setTimeout 精确，且窗口本来就小 */ }
+      }
+    }
   } catch (err) {
     // 半截 tmp 绝不能留下：既污染目录，也可能被下一次调试误读成"写成功"。
     try { rmSync(tmp, { force: true }); } catch { /* tmp 已经不在：忽略 */ }

@@ -198,7 +198,7 @@ grep、重构先 trace_calls 等）。幂等三态：created/updated/unchanged�
 
 浏览器打开 `http://127.0.0.1:24688`（GRAFT_MAX_UI=1 的会话启动时自动开）：
 
-- **KPI 卡 5 张**：活跃会话 / 累计工具调用 / 日志大小 / 建图状态（建图中会显示仓库与已耗时） / 面板地址
+- **KPI 卡 5 张**：活跃会话 / 累计工具调用（带错误率趋势，>10% 标红） / 日志大小 / 建图状态（建图中显示仓库、已耗时与产物体积增长曲线） / 面板地址
 - **活跃会话表**：谁在用——pid、用户、宿主进程（哪个编辑器拉起的）、仓库路径、请求数（实时增长）、启动时间、**容器标识徽章**
 - **工具耗时卡**：每个工具的次数 / 平均 / **p50 / p95** / 错误数 + 分布条（性能收益的可视化证据）
 - **联邦后端卡**：qmd / gitnexus / ccc 的探针状态、距今多久、安装/修复命令（一键复制）、**「重试探针」按钮**——装完后端不用重启会话
@@ -218,7 +218,10 @@ grep、重构先 trace_calls 等）。幂等三态：created/updated/unchanged�
 - 令牌携带方式：`Authorization: Bearer`、`?token=`、或 Cookie（点一次带 `?token=` 的 URL 自动种下 HttpOnly Cookie）
 - 所有响应带 `X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`X-Frame-Options: DENY`、最小 CSP
 - Host 伪造（DNS rebinding）→ `403`；无令牌打数据端点 → `401`
-- 前端是独立工程（`panel/`，esbuild 构建到 `dist/panel/`）；`GRAFT_MAX_UI_LEGACY=1` 回退旧版内联页面（保留一个 release 周期）
+- **日志落盘前自动脱敏**（`GRAFT_MAX_LOG_REDACT`，默认开）：工具入参/输出里明显密钥形态的串
+  （`sk-…`/`ghp_…`/`AKIA…`/`Bearer …`/`api_key=` 等）被掩码成 `前4字符***` —— 日志会经
+  `/tail` 进浏览器，不该成为密钥的第二个家
+- 前端是独立工程（`panel/`，esbuild 构建到 `dist/panel/`）。旧版内联页已在 max.11 删除（清退承诺兑现），面板只有一份 HTML
 
 截图见 `e2e/dashboard-dark.png` / `e2e/dashboard-light.png` / `e2e/dashboard-storage.png`（存储视图）。
 
@@ -308,11 +311,11 @@ node e2e/e2e-docker.mjs      # D1 版本 / D2 MCP 握手 / D3 真实调用 / D4 
 | `GRAFT_MAX_AUTO_INDEX` | 开 | `0` 关闭「编辑后自动增量索引」（post-edit 触发后台建图） |
 | `GRAFT_MAX_SYNC_THROTTLE_MS` | 60000 | 自动增量索引的最小间隔（毫秒） |
 | `GRAFT_MAX_UI_TOKEN` | 自动 | 面板数据端点令牌。非回环绑定**强制**开启（未给则随机生成）；回环默认关，设非空值即开启，`0` 显式关闭（仅回环形态有效） |
-| `GRAFT_MAX_UI_LEGACY` | 关 | `1` 回退旧版内联面板（新面板在 `panel/`，构建到 `dist/panel/`） |
 | `GRAFT_MAX_ICM` | 开 | ICM 时序记忆。`0` 关闭；`2` 干跑（只计数不 spawn，E2E/单测用） |
 | `GRAFT_MAX_ICM_TIMEOUT_MS` | 5000 | 单次 ICM 批量写入的硬超时 |
-| `GRAFT_MAX_FIRST_BUILD_WAIT_MS` | 20000 | 首查等建图的上限（上游是 90000；超时后立刻返回"后台建图中+重试指引"） |
+| `GRAFT_MAX_FIRST_BUILD_WAIT_MS` | 20000 | 首查等建图的上限（上游是 90000；超时后立刻返回"后台建图中+重试指引"）。建图期间面板显示产物体积增长曲线（每 500ms 采样） |
 | `GRAFT_MAX_FED_WATCH` | 开 | `0` 关闭联邦后端的 60s 探针心跳（心跳让"中途装上的后端"自动出现） |
+| `GRAFT_MAX_LOG_REDACT` | 开 | 日志脱敏开关。默认把**明显密钥形态**（`sk-…`、`ghp_…`、`AKIA…`、`xox…`、`Bearer …`、`api_key=/token:/password=` 等）在落盘前掩码成 `前4字符***`；`0` 关闭（排障需要看原文时）。只脱密钥，不碰代码/路径 |
 | `GRAFT_MAX_REPROBE_MIN_MS` | 2000 | 面板「重试探针」(`/reprobe`) 的最小间隔，`0` 关闭节流（默认 2s 防本机页面 spam 触发子进程） |
 | `GRAFT_MAX_FED_WATCH_MS` | 60000 | 联邦后端探针心跳间隔（毫秒）。决定"装完后端多久自动出现工具"：最坏 = 心跳间隔 + 失败 TTL 30s |
 | `GRAFT_MAX_FEDERATED` | 开 | `0`/`false` 一键关掉**全部联邦工具**（`max_find_docs`/`max_trace_arch`/`max_search_semantic`），只剩 graft 六件套 —— schema 预算吃紧或排查 graft 本体问题时用 |

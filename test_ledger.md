@@ -24,6 +24,12 @@
 | `test/first-build-wait.test.ts` | 冷启动 + building.json 生命周期 | 默认 20s 窗口（env 覆盖生效）；超时 note 含"已 N 秒 + 重试指引"；建图进程写/删状态文件（抛错也删）；残留超时判陈旧 | 已验证 6/6 |
 | `test/ignored-files.test.ts` | 隐私加固 | `.gitignore` 四条覆盖；`git check-ignore` 真命中；钩子脚本零第三方依赖 | 已验证 4/4 |
 
+| `test/fed-semantic.test.ts`（max.11 新增） | fed-semantic 契约（此前 58%→98%） | E2/E10/E11 软错误、两段式输出、limit≤20、lang/path 透传、非 JSON 透传 | 已验证 7/7 |
+| `test/build-progress.test.ts`（max.11） | M5 建图产物曲线 | progress 采样、抛错写终值、P3-9 不回退 | 已验证 4/4 |
+| `test/devlog-privacy.test.ts`（max.11） | M10 hostCmd 白名单 + M9 权限 | 无密钥值/内网路径；chmod 0600（Windows skip ×2 如实标注） | 已验证 2/2 |
+| `test/dashboard-error-rate.test.ts`（max.11） | M7 错误率 | 3/10=0.3、TTL、空窗口 null | 已验证 3/3 |
+| `e2e/e2e-fed-shape.mjs`（max.11） | M14 fedHealth 形状 | 全不装/全装两端 + 直测字段契约 | 已验证 16/16 |
+
 ## 2. 本轮修改/重写的 E2E
 
 | 脚本 | 断言数 | 依赖 | 状态 |

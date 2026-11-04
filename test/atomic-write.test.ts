@@ -7,7 +7,7 @@
  */
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { atomicWrite, atomicWriteSync } from '../src/util/atomic-write.js';
@@ -142,4 +142,47 @@ test('目标在一张不存在的子目录下 → 自动 mkdir -p（不再依赖
   const path = join(dir, 'a', 'b', 'c', 'cfg.json');
   atomicWriteSync(path, '{"nested":true}\n', { validateJson: true });
   assert.equal(readFileSync(path, 'utf8'), '{"nested":true}\n');
+});
+
+/* ---------------------------------------------------------------------------
+ * [M13] 异步版 atomicWrite：同样的契约（tmp+rename、bak 轮转、JSON 校验、
+ * 失败清 tmp），只是换 fs/promises。之前零调用者零测试——分支覆盖缺口的主要来源。
+ * ------------------------------------------------------------------------- */
+import { atomicWrite } from '../src/util/atomic-write.js';
+
+test('async: 正常写入 + bak 轮转与同步版一致', async () => {
+  const d = scratch();
+  const p = join(d, 'async-a.txt');
+  await atomicWrite(p, 'v1\n');
+  await atomicWrite(p, 'v2\n');
+  assert.equal(readFileSync(p, 'utf8'), 'v2\n');
+  assert.equal(readFileSync(p + '.bak', 'utf8'), 'v1\n');
+});
+
+test('async: 非法 JSON + validateJson → 抛错且原文件不动', async () => {
+  const d = scratch();
+  const p = join(d, 'async-b.json');
+  writeFileSync(p, '{"ok":1}\n', 'utf8');
+  await assert.rejects(() => atomicWrite(p, '{broken', { validateJson: true }), /refusing to write invalid JSON/);
+  assert.equal(readFileSync(p, 'utf8'), '{"ok":1}\n');
+});
+
+test('async: 失败时 tmp 被清理（目录里不残留 .tmp）', async () => {
+  const d = scratch();
+  const p = join(d, 'async-c.txt');
+  await atomicWrite(p, 'good\n');
+  // 用一个必然失败的写入：目标路径是个目录
+  const dirAsFile = join(d, 'async-dir');
+  mkdirSync(dirAsFile, { recursive: true });
+  await assert.rejects(() => atomicWrite(dirAsFile, 'x\n'));
+  const leftovers = readdirSync(d).filter((f) => f.endsWith('.tmp'));
+  assert.deepEqual(leftovers, [], `tmp 残留: ${leftovers.join(',')}`);
+});
+
+test('async: 并发写同一文件互不损坏（唯一 tmp 名的价值）', async () => {
+  const d = scratch();
+  const p = join(d, 'async-race.txt');
+  await Promise.all(Array.from({ length: 8 }, (_, i) => atomicWrite(p, `line-${i}\n`)));
+  const body = readFileSync(p, 'utf8');
+  assert.match(body, /^line-\d+\n$/, `损坏的内容: ${JSON.stringify(body)}`);
 });
