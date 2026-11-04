@@ -6,7 +6,7 @@
   （Docker Desktop 29.9.2）。零 mock 掉业务逻辑。
 - 被测仓库：`C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code`（有 graft 索引 +
   agentcode qmd 集合 + gitnexus 索引）、`duck2api-hub`、以及各脚本自建的临时仓库。
-- 总表：**11 个脚本，全部全绿**。
+- 总表：**12 个脚本，全部全绿**。
 
 ## 1. 一览
 
@@ -20,7 +20,8 @@
 | `e2e-idempotent.mjs` | 9 | **9/9** | 真实 server ×5 | 提示词幂等 + 首查建图不重复 + 增量刷新 |
 | `e2e-race.mjs` | 1 | **PASS** | 真实 server ×5 | 并发写 sessions.json 不损坏 |
 | `e2e-fault-tolerance.mjs` | 6 | **6/6** | 代码级 | 超时/软错误/永不 throw |
-| `e2e-backend-hotplug.mjs` | 9 | **9/9** | 假 qmd（真 PATH）+ 真面板 | 装完后端不用重启即出现工具 |
+| `e2e-backend-hotplug.mjs` | 9 | **9/9** | 假 qmd（真 PATH）+ 真面板 | 装完后端 **点「重试探针」** 立刻出现工具 |
+| `e2e-fed-heartbeat.mjs` | 3 | **3/3** | 假 qmd（真 PATH） | 装完后端 **什么都不点**，30s（失败 TTL）后心跳自动发出 `list_changed` |
 | `ui-interact.mjs` | 26 | **26/26** | Playwright | 零 pageerror / 零 console error |
 | `panel-load.mjs` | 10 | **10/10** | 真实 server | 串行/50 并发/事件循环未堵 |
 | `e2e-docker.mjs` | 13 | **13/13** | Docker | 镜像版本/非 root/MCP/令牌/健康检查 |

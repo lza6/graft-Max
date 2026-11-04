@@ -314,6 +314,7 @@ node e2e/e2e-docker.mjs      # D1 版本 / D2 MCP 握手 / D3 真实调用 / D4 
 | `GRAFT_MAX_FIRST_BUILD_WAIT_MS` | 20000 | 首查等建图的上限（上游是 90000；超时后立刻返回"后台建图中+重试指引"） |
 | `GRAFT_MAX_FED_WATCH` | 开 | `0` 关闭联邦后端的 60s 探针心跳（心跳让"中途装上的后端"自动出现） |
 | `GRAFT_MAX_REPROBE_MIN_MS` | 2000 | 面板「重试探针」(`/reprobe`) 的最小间隔，`0` 关闭节流（默认 2s 防本机页面 spam 触发子进程） |
+| `GRAFT_MAX_FED_WATCH_MS` | 60000 | 联邦后端探针心跳间隔（毫秒）。决定"装完后端多久自动出现工具"：最坏 = 心跳间隔 + 失败 TTL 30s |
 | `GRAFT_MAX_FEDERATED` | 开 | `0`/`false` 一键关掉**全部联邦工具**（`max_find_docs`/`max_trace_arch`/`max_search_semantic`），只剩 graft 六件套 —— schema 预算吃紧或排查 graft 本体问题时用 |
 | `GRAFT_MCP_NPX` | 关 | 上游兼容：强制 npx 形式注册（原版行为） |
 
@@ -334,7 +335,8 @@ node e2e/e2e-dashboard.mjs     # 4/4
 node e2e/e2e-live-scenario.mjs # 8/8
 node e2e/e2e-idempotent.mjs    # 9/9
 node e2e/ui-interact.mjs       # 26/26（Playwright，零 JS 错误；需先 build）
-node e2e/e2e-backend-hotplug.mjs # 9/9（后端热插拔：装完不用重启）
+node e2e/e2e-backend-hotplug.mjs # 9/9（后端热插拔：点重探即生效）
+node e2e/e2e-fed-heartbeat.mjs   # 3/3（不点按钮：30s 后心跳自动发现）
 ```
 
 **净新增失败 = 0 才算过**（对比改动前的 fail 集合）。

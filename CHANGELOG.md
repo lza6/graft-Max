@@ -53,7 +53,7 @@
   存储卡**按仓库分组**。
 - **多仓库**：一张面板认识全部活跃会话的仓库（`knownRoots()`），`/storage` 返回 `roots` 分组，
   不需要多进程改参数。
-- **后端热插拔**：装完 qmd/gitnexus/ccc 不用重启会话——探针心跳 + `/reprobe` + `list_changed`。
+- **后端热插拔**：装完 qmd/gitnexus/ccc 不用重启会话——显式路径 `/reprobe`（点按钮立即生效）+ 隐式路径 60s 探针心跳（最坏 ~90s 自动出现，`GRAFT_MAX_FED_WATCH_MS` 可调），两条都有 E2E 覆盖。
 - **ICM 时序批量化**：满 32 行或 60s 一次 `icm.exe store`（原来每次调用一个进程、单次实测 3.26s），
   5s 硬超时、并发 1、先落 `tool-timeline.jsonl`（数据永不丢）。`GRAFT_MAX_ICM=0/2`（关/干跑）。
 - **CI 门禁** `.github/workflows/ci-max.yml`：tsc + build + 版本断言 + 打包完整性 + 自包含冒烟 E2E（24 条）。

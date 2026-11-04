@@ -31,6 +31,7 @@
 | `e2e/e2e-ci-smoke.mjs`（新） | 24 | 仅 dist + 临时仓库（**无外部后端/无浏览器**） | 已验证 24/24 |
 | `e2e/ui-interact.mjs`（重写） | 26 | Playwright + dist | 已验证 26/26，零 pageerror |
 | `e2e/e2e-backend-hotplug.mjs`（新） | 9 | dist + 假 qmd（真 PATH）+ 真面板 | 已验证 9/9 |
+| `e2e/e2e-fed-heartbeat.mjs`（新） | 3 | dist + 假 qmd（真 PATH） | 已验证 3/3（30s 失败 TTL + 300ms 心跳） |
 | `e2e/e2e-fed-perf.mjs`（加强断言） | ≥9 | 真实 qmd/gitnexus | 见 §4 |
 | `e2e/e2e-federation.mjs` | 9 | 真实后端 | 见 §4 |
 | `e2e/e2e-docker.mjs` | 9 | Docker Desktop | 见 §4 |

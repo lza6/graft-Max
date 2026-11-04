@@ -72,7 +72,8 @@ node e2e/e2e-live-scenario.mjs        8/8
 node e2e/e2e-idempotent.mjs           9/9
 node e2e/e2e-race.mjs                 PASS（sessions.json 合法 JSON 7 行）
 node e2e/e2e-fault-tolerance.mjs      6/6
-node e2e/e2e-backend-hotplug.mjs      9/9
+node e2e/e2e-backend-hotplug.mjs      9/9（点重探按钮即生效）
+node e2e/e2e-fed-heartbeat.mjs       3/3（不点按钮，30s 失败 TTL 后心跳自动发现）
 node e2e/ui-interact.mjs              26/26（零 pageerror）
 node e2e/panel-load.mjs               10/10（见 A7）
 node e2e/e2e-docker.mjs               13/13（新镜像 max.10，含令牌 401/200 与非 root）

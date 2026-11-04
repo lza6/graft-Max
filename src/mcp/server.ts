@@ -190,7 +190,9 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
   // 关掉：GRAFT_MAX_FED_WATCH=0。
   if (federatedOn && process.env.GRAFT_MAX_FED_WATCH !== '0') {
     onBackendsChanged(() => void federated.refresh());
-    startFedProbeWatch();
+    // 心跳间隔可覆盖（单测/E2E 用几百毫秒验证"装完自动出现"这条链路；默认 60s）
+    const watchMs = Number(process.env.GRAFT_MAX_FED_WATCH_MS);
+    startFedProbeWatch(Number.isFinite(watchMs) && watchMs > 0 ? watchMs : 60_000);
   }
   // [N12] 面板「重试探针」的落点：重探成功后重新算 tools/list 并通知客户端。
   // 这就是"装完 qmd → 面板点一下 → max_find_docs 立刻出现"的那条链路。
