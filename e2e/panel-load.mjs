@@ -9,6 +9,10 @@
  *   3. /storage 仍然是毫秒级（按 root 分桶的缓存生效）；
  *   4. 零 5xx、零超时。
  *
+ * ⚠️ 必须在**空闲机器**上跑：与 `npm test`（会拉起上百个 node 进程）并行时，
+ *    实测 p95 会从 86ms 涨到 170ms、吞吐从 697 掉到 405 req/s —— 那是 CPU 争用，
+ *    不是回归。测量前先确认没有别的重活在跑。
+ *
  * 用法：node e2e/panel-load.mjs          （需先 npm run build）
  *      CONC=50 DURATION=6 node e2e/panel-load.mjs
  */

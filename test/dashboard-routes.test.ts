@@ -200,14 +200,20 @@ test('Host 伪造 → 403（防 DNS rebinding）', async () => {
   assert.equal(ok.status, 200);
 });
 
-test('GET /reprobe：节流 2s（回环免令牌形态下不能被页面 spam 触发子进程）', async () => {
-  // 第一次放行（可能 200），紧接的第二次必须 429 —— 这个端点会 spawn 三个探针进程
-  const first = await get('/reprobe');
-  assert.ok([200, 429].includes(first.status), `不期望的状态码 ${first.status}`);
-  const second = await get('/reprobe');
-  assert.equal(second.status, 429, '2s 内的第二次重探必须被节流');
-  const body = JSON.parse(second.body) as { retryInMs: number };
-  assert.ok(body.retryInMs > 0 && body.retryInMs <= 2000, `retryInMs=${body.retryInMs}`);
+test('GET /reprobe：节流（回环免令牌形态下不能被页面 spam 触发子进程）', async () => {
+  // 真探针本身可能耗时 >2s，所以把窗口调大以获得**确定性**断言（不是放宽断言）
+  process.env.GRAFT_MAX_REPROBE_MIN_MS = '600000';
+  try {
+    const first = await get('/reprobe');
+    assert.equal(first.status, 200, '第一次重探应当放行');
+    const second = await get('/reprobe');
+    assert.equal(second.status, 429, '窗口内的第二次重探必须被节流');
+    const body = JSON.parse(second.body) as { error: string; retryInMs: number };
+    assert.equal(body.error, 'reprobe throttled');
+    assert.ok(body.retryInMs > 0 && body.retryInMs <= 600_000, `retryInMs=${body.retryInMs}`);
+  } finally {
+    delete process.env.GRAFT_MAX_REPROBE_MIN_MS;
+  }
 });
 
 test('percentile 纯函数：最近秩法，边界不返回 NaN', () => {

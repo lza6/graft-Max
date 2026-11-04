@@ -346,6 +346,49 @@ async function storageEntries(root: string): Promise<StorageEntry[]> {
   return entries;
 }
 
+/**
+ * [N11 收尾] 路径级大小缓存（30s）。
+ *
+ * 多仓库时 `collectStorage()` 会对**每个** root 重跑一遍"全局产物"（日志/会话/
+ * trail 家目录/qmd 模型缓存）—— 这些路径跟 root 无关，N 个仓库就是 N 次重复遍历。
+ * qmd 模型缓存动辄上百 MB，30s 里走 3 遍纯属浪费。所以把"测量一个路径"本身缓存起来：
+ * 全局路径命中同一份结果，仓库路径各自一份。
+ *
+ * 注意：这个缓存与 `storageCache`（按 root 缓存整张表）是两层，互不冲突——
+ * 上层命中就完全不走这里，未命中才逐路径取（其中大部分仍然命中这里）。
+ */
+const SIZE_TTL_MS = 30_000;
+const sizeCache = new Map<string, { at: number; bytes: number; exists: boolean }>();
+
+async function measurePath(p: string, kind: StorageEntry['kind']): Promise<{ bytes: number; exists: boolean }> {
+  const hit = sizeCache.get(p);
+  if (hit && Date.now() - hit.at < SIZE_TTL_MS) return { bytes: hit.bytes, exists: hit.exists };
+  let bytes = 0;
+  let exists = false;
+  try {
+    bytes = kind === 'dir' ? await dirSize(p) : (await stat(p)).size;
+    exists = true;
+    // [review r4] SQLite 伴生文件（-wal/-shm）常占大头，一并计入
+    if (kind === 'file' && p.endsWith('.sqlite')) {
+      for (const side of ['-wal', '-shm']) {
+        try {
+          bytes += (await stat(p + side)).size;
+        } catch {
+          /* no sidecar */
+        }
+      }
+    }
+  } catch {
+    /* absent — still listed, marked 未创建 */
+  }
+  sizeCache.set(p, { at: Date.now(), bytes, exists });
+  if (sizeCache.size > 128) {
+    const oldest = [...sizeCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+    if (oldest) sizeCache.delete(oldest[0]);
+  }
+  return { bytes, exists };
+}
+
 async function collectStorage(root: string): Promise<StorageEntry[]> {
   const trailHome = process.env.TRAIL_HOME ?? join(homedir(), '.trail');
   const cacheDir = process.env.XDG_CACHE_HOME
@@ -369,18 +412,7 @@ async function collectStorage(root: string): Promise<StorageEntry[]> {
   ];
   const out: StorageEntry[] = [];
   for (const [label, p, kind] of [...candidate, ...repo]) {
-    let bytes = 0;
-    let exists = false;
-    try {
-      bytes = kind === 'dir' ? await dirSize(p) : (await stat(p)).size;
-      exists = true;
-      // [review r4] SQLite 伴生文件（-wal/-shm）常占大头，一并计入
-      if (kind === 'file' && p.endsWith('.sqlite')) {
-        for (const side of ['-wal', '-shm']) {
-          try { bytes += (await stat(p + side)).size; } catch {/* no sidecar */}
-        }
-      }
-    } catch {/* absent — still listed, marked 未创建 */}
+    const { bytes, exists } = await measurePath(p, kind);
     out.push({ label: label.trim(), path: p, bytes, kind, exists });
   }
   return out;
@@ -539,8 +571,12 @@ async function freshness(roots: string[]): Promise<FreshInfo[]> {
  */
 let toolsRefreshHook: (() => void) | null = null;
 
-/** [N12] /reprobe 的最小间隔：防"本机任意页面 spam 触发子进程"。 */
-const REPROBE_MIN_INTERVAL_MS = 2000;
+/** [N12] /reprobe 的最小间隔：防"本机任意页面 spam 触发子进程"。
+ * 可用 GRAFT_MAX_REPROBE_MIN_MS 覆盖（单测把它调大以获得确定性断言）。 */
+function reprobeMinIntervalMs(): number {
+  const v = Number(process.env.GRAFT_MAX_REPROBE_MIN_MS);
+  return Number.isFinite(v) && v >= 0 ? v : 2000;
+}
 let lastReprobeAt = 0;
 
 /** 注册"重探后刷新工具列表"的回调（server.ts 调用；测试也能用它断言被叫到）。 */
@@ -635,8 +671,9 @@ export function startDashboard(explicitPort?: number, root = process.cwd()): Ser
         // 节流 2s：回环免令牌形态下，任何本机页面都能用 <img src> 触发这个端点，
         // 不节流就等于给了一个"无限 spawn 子进程"的按钮。
         const now = Date.now();
-        if (now - lastReprobeAt < REPROBE_MIN_INTERVAL_MS) {
-          json(res, 429, { error: 'reprobe throttled', retryInMs: REPROBE_MIN_INTERVAL_MS - (now - lastReprobeAt) });
+        const minGap = reprobeMinIntervalMs();
+        if (minGap > 0 && now - lastReprobeAt < minGap) {
+          json(res, 429, { error: 'reprobe throttled', retryInMs: minGap - (now - lastReprobeAt) });
           return;
         }
         lastReprobeAt = now;

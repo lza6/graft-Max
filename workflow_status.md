@@ -118,7 +118,9 @@ graft-max viz --port ..  / => 200 2417B ; /app.js => 200 35825B
 | R1 续 | ⑤ `e2e-live-scenario` 断言 `s[0]`、且钉死 qmd spawn 路径 | 改为按自己 pid 找行、接受内嵌/spawn 两条真实路径（更强的"后端真被调用"断言） |
 | R1 续 | ⑥ `e2e-dashboard` 断言 `toggleTheme` 在 HTML 里（N8 后移入 bundle） | 改为同时断言 HTML 与 `/app.js`（更强：多一个 404 就能发现） |
 | R1 续 | ⑦ 多仓库下 `/storage` 单槽缓存会让每个请求重算 N 次遍历 | 缓存与 inflight 按 root 分桶（压测 p50 1.1ms 证明） |
-| R2（独立 Critic） | 见 §8 | |
+| R2（CI 反查，读上一版 push 的 Actions 日志） | ⑧ **仓库 CI 一直是红的（ubuntu + windows 都红）**：`test/mcp-server.test.ts` 的两条 "advertises every tool"（not ok 1738/1739）把联邦工具写进固定期望值，并引用 `GRAFT_MAX_FEDERATED=0` 当确定性开关 —— 而**代码里从来没实现过这个开关**（只在测试与 `项目约束.md` §4 被提到）。结果装了后端的机器多两个工具、CI runner 少两个工具，两边都断言失败（4050 pass / 2 fail）。 | ⑧ 真正实现 `GRAFT_MAX_FEDERATED=0/false`（`availableFederatedTools()` 返回空）；测试改确定性口径（六件套 + 六件套之外只允许联邦工具）。`test/mcp-server.test.ts` 5/5；README 补该变量。 |
+| R2 续 | ⑨ `/reprobe` 无节流：回环免令牌形态下任何本机页面都能用 `<img src>` 触发它，而它 spawn 三个探针进程 | ⑨ 加 2s 节流（429 + retryInMs）+ 契约测试 |
+| R3（独立 Critic） | 见 §8 | |
 
 ## 6. 已知限制 / 待外部条件
 
