@@ -313,6 +313,7 @@ node e2e/e2e-docker.mjs      # D1 版本 / D2 MCP 握手 / D3 真实调用 / D4 
 | `GRAFT_MAX_ICM_TIMEOUT_MS` | 5000 | 单次 ICM 批量写入的硬超时 |
 | `GRAFT_MAX_FIRST_BUILD_WAIT_MS` | 20000 | 首查等建图的上限（上游是 90000；超时后立刻返回"后台建图中+重试指引"） |
 | `GRAFT_MAX_FED_WATCH` | 开 | `0` 关闭联邦后端的 60s 探针心跳（心跳让"中途装上的后端"自动出现） |
+| `GRAFT_MAX_FEDERATED` | 开 | `0`/`false` 一键关掉**全部联邦工具**（`max_find_docs`/`max_trace_arch`/`max_search_semantic`），只剩 graft 六件套 —— schema 预算吃紧或排查 graft 本体问题时用 |
 | `GRAFT_MCP_NPX` | 关 | 上游兼容：强制 npx 形式注册（原版行为） |
 
 ---

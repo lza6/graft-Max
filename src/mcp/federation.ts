@@ -752,7 +752,21 @@ export async function callFederatedTool(
 /** Advertise-time filter: a backend that isn't installed hides its tool, the
  * same way ./server.ts hides graft tools in repos with no graph. Keeps the
  * agent's tool budget clean. */
+/** [graft-Max] 联邦工具总开关：`GRAFT_MAX_FEDERATED=0|false` 一键关掉。
+ *
+ * 为什么需要它：联邦工具占 schema 预算（tools/list 是每轮都计费的 context），
+ * 排查 graft 本体问题或换来更小的上下文时需要能一次关干净。`docs-selfdev/项目约束.md`
+ * §4 早就把这个开关写成了既定能力，`test/mcp-server.test.ts` 也按它的语义写断言 ——
+ * 但**代码里从来没实现过**，于是 CI 上那两条"advertises every tool"在装了后端的机器
+ * 上多出两个工具、在没装后端的 runner 上少两个工具，两边都红（4050 pass / 2 fail）。
+ * 现在是真开关。 */
+export function federationDisabled(): boolean {
+  const v = process.env.GRAFT_MAX_FEDERATED;
+  return v === '0' || v === 'false';
+}
+
 export async function availableFederatedTools(root = ''): Promise<FederatedToolDef[]> {
+  if (federationDisabled()) return [];
   const [qmdOk, gnxOk] = await Promise.all([backendAvailable(QMD), backendAvailable(GITNEXUS)]);
   // [graft-Max T2] embedded SDK counts as available even if the CLI shim
   // probe failed (e.g. PATH differences between shells) — the probe stays

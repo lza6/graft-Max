@@ -7,13 +7,13 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import { buildGraph } from '../src/graph/build.js';
 
-async function rpc(messages: object[], dir: string, expected: number): Promise<any[]> {
+async function rpc(messages: object[], dir: string, expected: number, extraEnv: Record<string, string> = {}): Promise<any[]> {
   // A fresh HOME: the server's boot upkeep reads the machine's own wiring and
   // update cache, and its lines ride in `instructions`, so the real HOME would
   // make the length test depend on whatever this machine has installed.
   const home = mkdtempSync(join(tmpdir(), 'graft-mcpsrv-home-'));
   const { TRAIL_HOME: _t, GRAFT_HOME: _g, ...env } = process.env;
-  const child = spawn(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'mcp', dir], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...env, HOME: home } });
+  const child = spawn(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'mcp', dir], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...env, HOME: home, ...extraEnv } });
   const responses: any[] = [];
   let buf = '';
   child.stdout.on('data', (d) => {
@@ -64,15 +64,16 @@ test('initialize → tools/list → tools/call round-trip', async () => {
   assert.match(call.result.content[0].text, /graft build/);
 });
 
-const ALL_TOOLS = [
-  // [graft-Max] federated sibling tools, served alongside the max six when
-  // their backends are installed (probed once per server boot; both are on
-  // this machine). A repo that invited graft gets the whole local toolchain.
-  // [graft-Max] 全部工具以 max_* 命名暴露（inMax 品牌）
-  ...(process.env.GRAFT_MAX_FEDERATED === '0' ? [] : ['max_find_code', 'max_file_api', 'max_check_freshness', 'max_trace_calls', 'max_find_all', 'max_repo_map', 'max_find_docs', 'max_trace_arch']),
-];
+/** [graft-Max] 六个 graft 工具必在（Max 品牌命名）。
+ *  联邦三工具**依赖后端探针**，因此**不能**写进这里的固定期望值 —— 之前那样写会在
+ *  CI（没装 qmd/gitnexus）稳定失败：4050 pass / 2 fail，红的就是这两条。
+ *  所以：确定性断言用 GRAFT_MAX_FEDERATED=0（只留六个），
+ *  "装了才出现"的语义由 e2e/e2e-backend-hotplug.mjs 真实覆盖。 */
+const MAX_SIX = ['max_find_code', 'max_file_api', 'max_check_freshness', 'max_trace_calls', 'max_find_all', 'max_repo_map'];
+/** 可能出现的联邦工具全集（出现与否取决于后端是否安装）。 */
+const FED_POSSIBLE = ['max_find_docs', 'max_trace_arch', 'max_search_semantic'];
 
-async function listTools(dir: string): Promise<string[]> {
+async function listTools(dir: string, extraEnv: Record<string, string> = {}): Promise<string[]> {
   const rs = await rpc(
     [
       { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 't', version: '0' } } },
@@ -80,6 +81,7 @@ async function listTools(dir: string): Promise<string[]> {
     ],
     dir,
     2,
+    extraEnv,
   );
   return rs.find((r) => r.id === 2).result.tools.map((t: any) => t.name);
 }
@@ -90,7 +92,14 @@ test('a built repo advertises every tool', async () => {
   writeFileSync(join(dir, 'src', 'math.ts'), 'export function add(a: number, b: number) {\n  return a + b;\n}\n');
   await buildGraph(dir);
 
-  assert.deepEqual(await listTools(dir), ALL_TOOLS);
+  // 关掉联邦 → 期望值确定（六个 max_*），在任何机器/CI 上都一样
+  assert.deepEqual(await listTools(dir, { GRAFT_MAX_FEDERATED: '0' }), MAX_SIX);
+
+  // 打开联邦 → 六件套必在；多出来的**只能**是联邦工具（具体哪几个由环境决定，不写死）
+  const withFed = await listTools(dir);
+  for (const t of MAX_SIX) assert.ok(withFed.includes(t), `missing ${t} in ${withFed.join(',')}`);
+  const extras = withFed.filter((t) => !MAX_SIX.includes(t));
+  for (const t of extras) assert.ok(FED_POSSIBLE.includes(t), `未预期的工具 ${t}（六件套之外只允许联邦工具）`);
 });
 
 test('a fresh worktree advertises every tool, on the strength of its parent', async () => {
@@ -127,7 +136,10 @@ test('a fresh worktree advertises every tool, on the strength of its parent', as
   git('worktree', 'add', '--detach', wt, 'HEAD');
   assert.equal(existsSync(join(wt, 'graft')), false, 'the gitignored cache does not travel');
 
-  assert.deepEqual(await listTools(wt), ALL_TOOLS);
+  // 同上：确定性断言关掉联邦；再验证六件套在联邦开启时仍然齐全
+  assert.deepEqual(await listTools(wt, { GRAFT_MAX_FEDERATED: '0' }), MAX_SIX);
+  const wtWithFed = await listTools(wt);
+  for (const t of MAX_SIX) assert.ok(wtWithFed.includes(t), `worktree missing ${t}`);
 });
 
 test('initialize carries instructions — the layer that survives tool deferral', async () => {
