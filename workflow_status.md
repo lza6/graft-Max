@@ -121,7 +121,8 @@ graft-max viz --port ..  / => 200 2417B ; /app.js => 200 35825B
 | R1 续 | ⑦ 多仓库下 `/storage` 单槽缓存会让每个请求重算 N 次遍历 | 缓存与 inflight 按 root 分桶（压测 p50 1.1ms 证明） |
 | R2（CI 反查，读上一版 push 的 Actions 日志） | ⑧ **仓库 CI 一直是红的（ubuntu + windows 都红）**：`test/mcp-server.test.ts` 的两条 "advertises every tool"（not ok 1738/1739）把联邦工具写进固定期望值，并引用 `GRAFT_MAX_FEDERATED=0` 当确定性开关 —— 而**代码里从来没实现过这个开关**（只在测试与 `项目约束.md` §4 被提到）。结果装了后端的机器多两个工具、CI runner 少两个工具，两边都断言失败（4050 pass / 2 fail）。 | ⑧ 真正实现 `GRAFT_MAX_FEDERATED=0/false`（`availableFederatedTools()` 返回空）；测试改确定性口径（六件套 + 六件套之外只允许联邦工具）。`test/mcp-server.test.ts` 5/5；README 补该变量。 |
 | R2 续 | ⑨ `/reprobe` 无节流：回环免令牌形态下任何本机页面都能用 `<img src>` 触发它，而它 spawn 三个探针进程 | ⑨ 加 2s 节流（429 + retryInMs）+ 契约测试 |
-| R3（独立 Critic） | 见 §8 | |
+| R3（CI 深挖，读 GitHub 上 node-20 那条 `CI` 的失败日志） | ⑩ windows-latest：`fed-qmd` 8 条失败——仓库无 `.gitattributes`，Git for Windows 的 `core.autocrlf=true` 把逐字节 fixture 检出成 CRLF。⑪ ubuntu-latest：`icm-timeline` 超时用例失败——`Promise resolution is still pending but the event loop has already resolved`，根因是 flush 超时定时器被 `unref()`，事件循环排空后超时回调不执行（生产语义同样错：5s 超时必须 kill）。 | ⑩ 新增 `.gitattributes`（`test/fixtures/** -text`；`*.sh`/`.githooks` 钉 LF），并在 autocrlf=true 的机器上重新 clone 验证 fixture 保持 LF、README 变 CRLF。⑪ 去掉该 unref；`test/icm-timeline.test.ts` 9/9。 |
+| R4（独立 Critic） | 见 §8 | |
 
 ## 6. 已知限制 / 待外部条件
 

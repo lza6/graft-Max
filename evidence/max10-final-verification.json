@@ -131,6 +131,20 @@
       "finding": "三处文档的测试数量口径不一致（9/10/11 个文件、'90+ 断言'）；压测数字三份文档各写一套；serverInfo.name 的 E2E 断言描述与代码不符",
       "fix": "统一为实测口径（12 文件/107 用例；压测一次真实输出；name 断言补 file:line 并改写结论）",
       "evidence": "git diff --diff-filter=A c7fd6ab..HEAD -- test/ → 12 文件；grep -c '^test(' → 107"
+    },
+    {
+      "id": "SR-6",
+      "severity": "P1（CI·windows）",
+      "finding": "仓库没有 .gitattributes：Git for Windows 的 core.autocrlf=true（CI runner 默认）会把 test/fixtures/qmd-cli-sample.txt 检出成 CRLF，而 fed-qmd 的断言要求逐字节等于真 CLI 输出（LF）→ windows-latest 上 8 条用例红",
+      "fix": "新增 .gitattributes（* text=auto；test/fixtures/** -text；*.sh/.githooks 钉 LF）",
+      "evidence": "在 autocrlf=true 的机器上重新 clone：fixture 首行无 ^M（LF），README 为 CRLF —— 直接证明修复生效"
+    },
+    {
+      "id": "SR-7",
+      "severity": "P1（CI·ubuntu）",
+      "finding": "icm-timeline 的超时用例在 ubuntu 报 'Promise resolution is still pending but the event loop has already resolved'：我把 flush 超时定时器 unref() 了，事件循环排空后超时回调永不执行 → 子进程不被 kill、Promise 永远 pending。生产语义同样错误（'5s 超时必须 kill' 会失效）",
+      "fix": "去掉该处 unref",
+      "evidence": "node --import tsx --test test/icm-timeline.test.ts → 9/9"
     }
   ],
   "images": {
