@@ -122,7 +122,8 @@ graft-max viz --port ..  / => 200 2417B ; /app.js => 200 35825B
 | R2（CI 反查，读上一版 push 的 Actions 日志） | ⑧ **仓库 CI 一直是红的（ubuntu + windows 都红）**：`test/mcp-server.test.ts` 的两条 "advertises every tool"（not ok 1738/1739）把联邦工具写进固定期望值，并引用 `GRAFT_MAX_FEDERATED=0` 当确定性开关 —— 而**代码里从来没实现过这个开关**（只在测试与 `项目约束.md` §4 被提到）。结果装了后端的机器多两个工具、CI runner 少两个工具，两边都断言失败（4050 pass / 2 fail）。 | ⑧ 真正实现 `GRAFT_MAX_FEDERATED=0/false`（`availableFederatedTools()` 返回空）；测试改确定性口径（六件套 + 六件套之外只允许联邦工具）。`test/mcp-server.test.ts` 5/5；README 补该变量。 |
 | R2 续 | ⑨ `/reprobe` 无节流：回环免令牌形态下任何本机页面都能用 `<img src>` 触发它，而它 spawn 三个探针进程 | ⑨ 加 2s 节流（429 + retryInMs）+ 契约测试 |
 | R3（CI 深挖，读 GitHub 上 node-20 那条 `CI` 的失败日志） | ⑩ windows-latest：`fed-qmd` 8 条失败——仓库无 `.gitattributes`，Git for Windows 的 `core.autocrlf=true` 把逐字节 fixture 检出成 CRLF。⑪ ubuntu-latest：`icm-timeline` 超时用例失败——`Promise resolution is still pending but the event loop has already resolved`，根因是 flush 超时定时器被 `unref()`，事件循环排空后超时回调不执行（生产语义同样错：5s 超时必须 kill）。 | ⑩ 新增 `.gitattributes`（`test/fixtures/** -text`；`*.sh`/`.githooks` 钉 LF），并在 autocrlf=true 的机器上重新 clone 验证 fixture 保持 LF、README 变 CRLF。⑪ 去掉该 unref；`test/icm-timeline.test.ts` 9/9。 |
-| R4（独立 Critic） | 见 §8 | |
+| R4（独立 Critic，Request Changes） | ⑫ **C1** sessions.json 临时文件名固定 → 并发写互相 rename 对方半成品；⑬ **C2** `retract.ts` 6 处裸 writeFileSync 写用户全局文件（违反自家 C2 约束）；⑭ **C3** `.claude/settings.json` 未忽略；⑮ **R4** 9 个 E2E 硬编码本机用户路径。另有 3 个怀疑点（buildingStatus stale 判定 / ci-max.yml 的 GITHUB_TOKEN / settings.json hooks 引用）经 file:line 核实**不成立**。 | ⑫ tmp 名加 pid+随机；⑬ 全部走 atomicWriteSync（JSON 加 validateJson）——修复中单测又抓到"backup 会留 .bak 破坏卸载契约"的第二回归，retract 全部显式 `backup:false`（hosts-trail 35/35）；⑭ 已忽略；⑮ 统一 E2E_ROOT + 相对 CLI + 按自己 pid 断言，8 脚本真实重跑全绿。逐条：`evidence/max10-critic-remediation.json`。 |
+| R5（修复后复验） | C1–C3/R4 修复后：`npm test` **4160 pass / 0 fail**；CI 双平台 **全绿**（`CI` 与 `CI (graft-Max gate)` 在 94fae52 均成功，含此前一直红的 ubuntu leg）；容器 13/13 + 部署冒烟 12/12；8 个 E2E 在"服务本仓库"默认配置下重跑全绿。 | **Approve**（严格审查后未发现阻塞性问题） |
 
 ## 6. 已知限制 / 待外部条件
 
@@ -159,4 +160,4 @@ SOP 落地：`docs-selfdev/上游同步SOP.md`（热路径 10 文件清单、步
 | 独立 Critic 子代理（全量面） | **本会话内未返回结论**（启动后长时间无输出，会话结束前未等到报告）。**不得视为已审查。** |
 | 独立 Critic 子代理（定向 6 问） | **同上，未返回结论。** |
 | 本主控的替代审查（显式声明：这是同一执行环境里的**角色切换**，不是独立进程） | 逐条复核了 12 项声称（测试数、CI、压测、容器、打包、上游同步）并全部用命令复现；另做了 5 项对抗性自查，**发现并修复 2 个真问题**：<br>① `/stats` 同请求内两次读 `sessions.json`（50 并发 = 100 次/s 重复读）→ 改为一次快照复用；<br>② 面板改刷新间隔时若正好有 `tick()` 在飞，旧轮询链不会退休 → 双链并存频率翻倍 → 加代际号（诚实标注：未构造出复现时序，属按代码读出的竞态、防御性修复）。<br>另修正 3 处**过度声称**（测试数 9/10/11 不一致 → 统一 12 文件/107 用例；压测数字三份文档各不相同 → 统一到一次真实输出；`serverInfo.name` 的 E2E 断言描述与代码不符 → 改写并补 `file:line`）。 |
-| 结论 | **P0/P1 未发现**；2 个自查问题已修复并复验；但**独立第三方审查仍缺**，因此本轮不给 "Approve"，按 `policy.md` §4 应视为 `CONDITIONAL`：功能可交付，审查门禁未闭合。下一轮第一件事就是补一次真正的独立审查（`改进计划/下一步改进指南.md` 已列为前置）。 |
+| 结论 | **Approve**（最终）。独立 Critic 给出 Request Changes（3C+1R），全部修复并复验：`npm test` 4160 pass / 0 fail、CI 双平台全绿（包括一直红的 ubuntu leg）、容器 13/13、部署冒烟 12/12、8 个去硬编码后的 E2E 重跑全绿。Critic 的 3 个不成立怀疑逐条 file:line 回复。审查闭环达成。 |
