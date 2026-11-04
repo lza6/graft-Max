@@ -173,7 +173,7 @@ SOP 落地：`docs-selfdev/上游同步SOP.md`（热路径 10 文件清单、步
 | M15 打包 | done（max.11 tarball 1540 文件；全局安装 `--version` = 0.28.0-max.11） | 命令输出 |
 | 部署热更新 | done（镜像重建 → compose 重建 → verify-compose 12/12；回滚点 `graft-max:rollback-max10`） | 命令输出 |
 | GitHub CI（gate） | **success 双平台**（`99b4894`；含 tsc/build/版本断言/打包完整性/**覆盖率门禁**/冒烟 E2E，ubuntu 另跑 `npm test`） | run 4179xxxx |
-| GitHub CI（上游 `ci.yml`） | 报告时仍在跑（node 20 × 双 OS × 两轮重试；本地全量与 Linux 容器均已 0 fail） | 见 §6 |
+| GitHub CI（上游 `ci.yml`，node 20 双平台全量 `npm test`） | **success**（`464d28e`、`b5ee188` 两次；含 4292 用例） | run 记录 |
 
 > **CI 排队的真实原因（已确认，不是"卡住"）**：`ci-max.yml`/`ci.yml` 都设了
 > `concurrency.cancel-in-progress: true`，本会话为了修跨平台测试连续推送了多次，
