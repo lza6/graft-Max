@@ -518,11 +518,53 @@ function gnxSessionCall(
   });
 }
 
+/** [M-假死修复] 单次工具调用的**总预算**。
+ *
+ * 为什么必须有：下面的每一段（会话握手 15s、单次会话调用 45s、one-shot 45s）各自有
+ * 超时，但它们是**串联**的——一个"握手成功但 query 永远沉默"的假死后端会把
+ * 会话调用 45s + 重建 45s + one-shot 45s 串成 **135s+**，对 agent 来说就是
+ * "这个工具假死了"（实测 E2E 复现：100s 无回包）。host 的工具超时通常只有 60~120s，
+ * 超过就直接判死，用户看到的是请求卡住。
+ *
+ * 契约：`max_trace_arch` 的**端到端耗时**永远 ≤ TOTAL_BUDGET_MS（当前 60s——
+ * 留足一个正常大仓库查询的时间，又远低于 host 超时）。超预算立刻返回软错误，
+ * 告诉用户重试（重试会走负缓存/降级路径，反而更快）。
+ */
+const TRACE_TOTAL_BUDGET_MS = 60_000;
+
+/** 带总预算地跑一个异步任务。超预算返回 fallback（软错误），底层任务继续在后台
+ * 自然结束（各段有自己的超时与清理，不会泄漏进程）。 */
+function withTotalBudget<T>(p: Promise<T>, fallback: () => T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    let settled = false;
+    const t = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(fallback());
+    }, TRACE_TOTAL_BUDGET_MS);
+    t.unref?.();
+    p.then(
+      (v) => { if (!settled) { settled = true; clearTimeout(t); resolve(v); } },
+      () => { if (!settled) { settled = true; clearTimeout(t); resolve(fallback()); } },
+    );
+  });
+}
+
 /** Session-first query with one-shot fallback (original implementation kept
  * verbatim as the degradation path). */
 async function runGitnexusQuerySmart(args: Record<string, unknown>, cwd: string): Promise<{ text: string; isError: boolean }> {
   const query = String(args.query ?? '').trim();
   if (!query) return { text: 'max_trace_arch requires a query', isError: true };
+  return withTotalBudget(
+    runGitnexusQuerySmartInner(args, cwd, query),
+    () => ({
+      text: `gitnexus did not answer within ${Math.round(TRACE_TOTAL_BUDGET_MS / 1000)}s (backend may be hung) — retry the same query (a retry reuses the cached session state and fails faster), or run \`npx gitnexus analyze\` to (re)index this repo.`,
+      isError: true,
+    }),
+  );
+}
+
+async function runGitnexusQuerySmartInner(args: Record<string, unknown>, cwd: string, query: string): Promise<{ text: string; isError: boolean }> {
   const s = await getGnxSession(cwd);
   if (s) {
     const t0 = Date.now();

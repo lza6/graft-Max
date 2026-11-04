@@ -1,6 +1,6 @@
 {
   "name": "graft-max",
-  "version": "0.28.0-max.12",
+  "version": "0.28.0-max.13",
   "description": "[graft-Max] Self-developed fork of graft (nanonets/graft v0.28.0) - repo context graph + planned unified MCP aggregation for our toolchain.",
   "keywords": [
     "ai",

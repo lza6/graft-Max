@@ -3,6 +3,34 @@
 所有重要改动记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循语义化：`0.28.0-max.N`（上游版本-max 补丁位）。
 
+## [0.28.0-max.13] — 2026-11
+
+> 补丁版：修用户报告的 **MCP 假死导致请求卡住**（真实 E2E 复现并修复）。
+
+### 修复（P1 · 用户可感知的假死）
+
+- **`max_trace_arch` 遇到"活着但沉默"的后端时请求无界挂起**。
+  实测复现（`e2e/e2e-hang-backend.mjs`，假 gitnexus 对 initialize 有响应、对 query 永不回）：
+  旧行为 **100s+ 无回包**——每一段（会话握手 15s、单次会话调用 45s、one-shot 45s、
+  会话重建后重试 45s）都有自己的超时，但它们**串联**起来就是 135s+；host 的工具
+  超时通常只有 60~120s，用户看到的就是"请求卡死"。
+  **修法**：给整条链加 **60s 总预算**（`withTotalBudget`）——超预算立刻返回软错误
+  （isError=true，带"重试同查询会更快 + `npx gitnexus analyze`"的可执行指引），
+  底层各段超时与清理照常收尾、不泄漏进程。**契约：`max_trace_arch` 端到端 ≤ 62s。**
+- 实测前后对比：100126ms 无回包 → **60520ms isError=true**。
+  同请求期间 `max_check_freshness` 仍 111ms 响应（无队头阻塞）；server 本体存活。
+
+### 新增
+
+- **`e2e/e2e-hang-backend.mjs` 假死后端 E2E**（7 条断言）：真 spawn 假死 gitnexus
+  （握手成功/query 沉默），断言 ①有回包不永远挂起 ②isError=true ③总耗时 ≤62s
+  ④慢请求期间其它请求 <5s ⑤第二次调用同样被兜住 ⑥server 存活。
+
+### 回归
+
+federation 9/9、fed-perf 9/9、backend-hotplug 9/9、robustness/cache/qmd/semantic 40/40、
+ci-smoke 24/24 —— 正常路径无一劣化。
+
 ## [0.28.0-max.12] — 2026-11
 
 > 补丁版：修一个**真实的红线违规**（fork 抢上游注册槽位）+ 交付"日志归因"诊断工具。
