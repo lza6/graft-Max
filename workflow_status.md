@@ -19,9 +19,9 @@
 |---|------|------|------|
 | A1 | `npx tsc --noEmit` 0 错误 | done | 每条改动后执行，均 0 输出 |
 | A2 | `npm run build` 成功（含 panel 前端 tsc + esbuild） | done | `dist/panel/app.js` 17.4KB；版本 `0.28.0-max.10` |
-| A3 | `npm test` 总 fail = 0（基线不得回退） | done | **4261 tests / 4158 pass / 0 fail / 103 skipped**，exit 0（max.9: 4156/4053/0） |
+| A3 | `npm test` 总 fail = 0（基线不得回退） | done | **4263 tests / 4160 pass / 0 fail / 103 skipped**，exit 0（max.9: 4156/4053/0） |
 | A4 | 联邦 E2E 真实通过 | done | `e2e-federation` 9/9、`e2e-fed-perf` 9/9（含内嵌路径 `qmd://agentcode/README.md:20 #101e06` 断言） |
-| A5 | 面板 UI 真实浏览器验收 ≥12 条 | done | `ui-interact` **26/26**，零 pageerror / 零 console error，截图 `e2e/ui-interact.png` |
+| A5 | 面板 UI 真实浏览器验收 ≥12 条 | done | `ui-interact` **27/27**，零 pageerror / 零 console error，截图 `e2e/ui-interact.png` |
 | A6 | Docker 部署真实可用 | done | `e2e-docker` **13/13**（新镜像 max.10）；`verify-compose` **12/12**（热更新后的真实实例） |
 | A7 | 面板端点压测有数据且不劣化 | done | 串行 p50 `/stats` 2.7ms、`/tail` 1.2ms、`/storage` 1.3ms；50 并发 p95 **83.8ms**（max.9: 108ms）；721.5 req/s；零错误 |
 | A8 | 文档与实现一致 | done | README / CHANGELOG / `docs-selfdev/*` / `test_ledger.md` / `policy.md` 同步 |
@@ -41,15 +41,15 @@
 | **N5** | 联邦输出契约对齐 CLI | done | `test/fed-qmd.test.ts` + fixture（真实 `qmd search` 输出）；E2E 断言 `qmd://…:line #docid` |
 | **N6** | 联邦健壮性三补 | done | `test/fed-robustness.test.ts`（监听器归零 / probe 30s+5min TTL / 8MB kill）+ `fed-cache` 键序 |
 | **N7** | 自研模块单测补齐 | done | **12 个新测试文件 / 107 条用例**（`git diff --diff-filter=A c7fd6ab..HEAD -- test/` 实测；见 `test_ledger.md`） |
-| **N8** | 面板前端拆工程 | done | `panel/` → `dist/panel/`；`GRAFT_MAX_UI_LEGACY=1` 回退；ui-interact 26/26 |
+| **N8** | 面板前端拆工程 | done | `panel/` → `dist/panel/`；`GRAFT_MAX_UI_LEGACY=1` 回退；ui-interact 27/27 |
 | **N9** | 工具耗时卡 + 性能分位 | done | `panel` 工具耗时卡（calls/avg/p50/p95/errors）+ `/stats.toolStats`；断言 p95≥p50 |
-| **N10** | 面板契约测试 | done | `ui-interact` 26/26（含轮询频率、暂停语义、零 JS 错误） |
+| **N10** | 面板契约测试 | done | `ui-interact` 27/27（含轮询频率、暂停语义、零 JS 错误） |
 | **N11** | 多仓库（方案 A） | done | `knownRoots()` + `/storage.roots` 分组 + 存储缓存按 root 分桶 |
 | **N12** | 联邦后端自助安装 | done | `e2e-backend-hotplug` 9/9（装完 → 点重探 → tools/list 立刻多出工具） |
 | **N13** | 冷启动体验 | done | `test/first-build-wait.test.ts` 6/6（20s 窗口 + 进度 note + building.json 归建图进程） |
 | **N14** | 索引新鲜度可视化 | done | `/fresh` + 面板「索引新鲜度」卡（clean/drift/unknown + 改增删） |
 | **N15** | 打包完整性审计 | done | `npm pack` 含 9 wasm + 17 scm + panel + viewer；干净 prefix 全局安装后 build/viz 可用 |
-| **N16** | CI 门禁 | done（本地等价验证） | `.github/workflows/ci-max.yml`（tsc+build+版本断言+打包完整性+冒烟 E2E）；GitHub 真绿勾见 §6 待验证 |
+| **N16** | CI 门禁 | done | `.github/workflows/ci-max.yml`；**GitHub 侧实跑全绿**：`max gate (ubuntu-latest)` ✅ + `max gate (windows-latest)` ✅（commit 4d63b5e，run 41752856232） |
 | **N17** | 发布（npm/Docker Hub） | **blocked** | 无账号（用户指示本地闭环）：tarball + 本机 Docker 热更新 + GitHub Release 替代 |
 | **N18** | 上游同步演练 | done | 见 §4（试合并 → 冲突清单 → SOP `docs-selfdev/上游同步SOP.md`） |
 | **N19** | 文档与实现对齐 | done | README（6+3 工具口径/8 个新 env/面板安全两形态）、CHANGELOG、E2E-REPORT 重跑 |
@@ -63,7 +63,7 @@
 npx tsc --noEmit                      0 错误（多次）
 npm run build                         成功；dist/panel/app.js 17.4KB；9 wasm；17 scm
 node dist/cli.js --version            0.28.0-max.10
-npm test                              4261 tests / 4158 pass / 0 fail / 103 skipped / exit 0
+npm test                              4263 tests / 4160 pass / 0 fail / 103 skipped / exit 0
 node e2e/e2e-ci-smoke.mjs             24/24
 node e2e/e2e-federation.mjs           9/9
 node e2e/e2e-fed-perf.mjs             9/9（T3 一次 1153ms → 二次 144ms）
@@ -74,7 +74,7 @@ node e2e/e2e-race.mjs                 PASS（sessions.json 合法 JSON 7 行）
 node e2e/e2e-fault-tolerance.mjs      6/6
 node e2e/e2e-backend-hotplug.mjs      9/9（点重探按钮即生效）
 node e2e/e2e-fed-heartbeat.mjs       3/3（不点按钮，30s 失败 TTL 后心跳自动发现）
-node e2e/ui-interact.mjs              26/26（零 pageerror）
+node e2e/ui-interact.mjs              27/27（零 pageerror）
 node e2e/panel-load.mjs               10/10（见 A7）
 node e2e/e2e-docker.mjs               13/13（新镜像 max.10，含令牌 401/200 与非 root）
 node e2e/verify-compose.mjs           12/12（部署后真实实例：端口回环/令牌/面板资源/令牌不落盘）
@@ -126,7 +126,13 @@ graft-max viz --port ..  / => 200 2417B ; /app.js => 200 35825B
 ## 6. 已知限制 / 待外部条件
 
 - **N17 npm publish / Docker Hub push：blocked**（无账号；用户指示走本地闭环）。产物：tarball、本机镜像、GitHub Release。
-- CI 的**真绿勾**需 push 后由 GitHub 执行（本轮会 push，结果写回本节）。
+- CI 的**真绿勾**：已实测。`CI (graft-Max gate)` 在 `4d63b5e` 上 **ubuntu-latest ✅ + windows-latest ✅**
+  （双平台都跑 tsc / build / 版本断言 / 打包完整性 / 自包含 E2E；ubuntu 额外跑 `npm test` 通过，
+  run id 41752856232）。
+- **遗留一条上游 CI 红灯**：上游自带的 `.github/workflows/ci.yml`（node 20，跑 `npm test`）在
+  `4d63b5e` 的 ubuntu leg 仍失败（windows leg 通过）。本轮新 gate 用 node 22 且全绿，
+  说明这是 **Node 20 特有的**上游测试问题，与 Max 改动无关（max.9 时两个 leg 都红）。
+  已记入 `改进计划/下一步改进指南.md` 的遗留清单（M13 一带处理：给 ci.yml 也升到 22 或定位该用例）。
 - 压测为本机单机数据，不构成生产并发基准。
 - `INSTALL_CCC=1` / `INSTALL_GITNEXUS=1` 镜像未实测（默认关，各 +2GB）。
 - 面板 "建图进度" 只到"已耗时 N 秒 + 仓库"，没有文件级进度（build 侧未暴露中途计数）。
@@ -145,10 +151,11 @@ graft-max viz --port ..  / => 200 2417B ; /app.js => 200 35825B
 
 SOP 落地：`docs-selfdev/上游同步SOP.md`（热路径 10 文件清单、步骤、判定标准、4 条反模式、本次记录）。
 
-## 8. 独立审查
+## 8. 独立审查（状态：部分完成，如实记录）
 
-（Critic 子代理结论写在此处，见 §8 表格补充）
-
-| 项 | 结论 |
+| 项 | 事实 |
 |----|------|
-| 待填 | — |
+| 独立 Critic 子代理（全量面） | **本会话内未返回结论**（启动后长时间无输出，会话结束前未等到报告）。**不得视为已审查。** |
+| 独立 Critic 子代理（定向 6 问） | **同上，未返回结论。** |
+| 本主控的替代审查（显式声明：这是同一执行环境里的**角色切换**，不是独立进程） | 逐条复核了 12 项声称（测试数、CI、压测、容器、打包、上游同步）并全部用命令复现；另做了 5 项对抗性自查，**发现并修复 2 个真问题**：<br>① `/stats` 同请求内两次读 `sessions.json`（50 并发 = 100 次/s 重复读）→ 改为一次快照复用；<br>② 面板改刷新间隔时若正好有 `tick()` 在飞，旧轮询链不会退休 → 双链并存频率翻倍 → 加代际号（诚实标注：未构造出复现时序，属按代码读出的竞态、防御性修复）。<br>另修正 3 处**过度声称**（测试数 9/10/11 不一致 → 统一 12 文件/107 用例；压测数字三份文档各不相同 → 统一到一次真实输出；`serverInfo.name` 的 E2E 断言描述与代码不符 → 改写并补 `file:line`）。 |
+| 结论 | **P0/P1 未发现**；2 个自查问题已修复并复验；但**独立第三方审查仍缺**，因此本轮不给 "Approve"，按 `policy.md` §4 应视为 `CONDITIONAL`：功能可交付，审查门禁未闭合。下一轮第一件事就是补一次真正的独立审查（`改进计划/下一步改进指南.md` 已列为前置）。 |

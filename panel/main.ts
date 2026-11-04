@@ -469,6 +469,12 @@ async function loadLog(force: boolean): Promise<void> {
 // ---------------------------------------------------------------------------
 let timer: number | null = null;
 let slowTimer: number | null = null;
+/** [自审修复·静态确认] 轮询"代"：改刷新间隔的那一瞬间若正好有一轮 `tick()` 在 await，
+ *  它恢复后会**再挂一个定时器**，此时 `clearTimeout` 已经无从下手（旧 id 早就 fire 过），
+ *  于是两条链并存、请求频率翻倍。用代际号让过期的链自己退出。
+ *  诚实标注：**没有构造出能复现它的时序**（窗口只有几十毫秒），这是按代码读出来的竞态，
+ *  属防御性修复；E2E 只有"速率不超上界"的断言，不能当它的回归证明。 */
+let timerGen = 0;
 
 /** 一次完整刷新：日志 + KPI + 三张表。任何一块失败都要让用户看见。 */
 async function tick(force = false): Promise<void> {
@@ -500,9 +506,16 @@ const intervalMs = (): number => {
 };
 
 function startTimer(): void {
-  if (timer !== null) clearTimeout(timer);
+  timerGen += 1;
+  const my = timerGen;
+  if (timer !== null) {
+    clearTimeout(timer);
+    timer = null;
+  }
   const loop = async (): Promise<void> => {
+    if (my !== timerGen) return; // 已被新的一代取代（用户改了间隔）→ 这条链退休
     await tick(false);
+    if (my !== timerGen) return;
     timer = window.setTimeout(loop, intervalMs());
   };
   timer = window.setTimeout(loop, intervalMs());

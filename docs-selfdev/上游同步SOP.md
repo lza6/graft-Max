@@ -90,6 +90,6 @@ git commit
 冲突          README.md 一处（整段）→ 取 ours（该段在我们的重写里不存在）
 解决成本      ≈1 分钟
 验证          npx tsc --noEmit 0 错误；npm run build 成功；版本 0.28.0-max.10；
-              npm test 4261 tests / 4158 pass / 0 fail；11 个 E2E 全绿
+              npm test 4261 tests / 4158 pass / 0 fail；12 个 E2E 全绿
 同步后状态    git rev-list --left-right --count HEAD...upstream/main → 32 0（不再落后）
 ```

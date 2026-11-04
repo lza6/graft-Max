@@ -193,6 +193,10 @@ try {
   await page.waitForTimeout(2400);
   const statsHits = await page.evaluate(() => window.__hits['/stats'] ?? 0);
   check('10 轮询间隔 500ms 真实生效（2.4s 内 /stats ≥ 3）', statsHits >= 3, `${statsHits} 次`);
+  // 上界断言：请求速率不能明显超过 1/间隔（防"双链"这类竞态把频率翻倍）。
+  // 诚实标注：本用例的时序（改间隔时轮询正好空闲）**构造不出**双链，所以这条是
+  // 防御性上界，不是对该竞态的回归证明；修复本身见 panel/main.ts 的 timerGen 注释。
+  check('10b 轮询速率不超上界（2.4s 内 /stats ≤ 8）', statsHits <= 8, `${statsHits} 次（500ms 间隔期望 4±1）`);
 
   // 11) 暂停：暂停后 2s 内不再请求；手动刷新仍有效
   await page.click('#btnPause');

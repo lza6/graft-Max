@@ -1,0 +1,146 @@
+{
+  "task_id": "max10-final-verification",
+  "title": "max.10 交付前最终验证（权威数字，全部在本会话内真实执行）",
+  "status": "done",
+  "timestamp": "2026-11-04T09:40:00+08:00",
+  "commit_under_test": "6b0fe85 + 后续 3 个本地提交（面板 timerGen / 断言标注 / 文档口径）",
+  "commands_executed": [
+    {
+      "cmd": "npx tsc --noEmit",
+      "exit_code": 0,
+      "raw_output_tail": "(no output)"
+    },
+    {
+      "cmd": "npm run build",
+      "exit_code": 0,
+      "raw_output_tail": "tsc ×3（src / viewer / panel）+ viewer bundle + panel bundle (17.5KB) + 17 scm + 9 wasm"
+    },
+    {
+      "cmd": "node scripts/run-tests.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "tests 4263 / pass 4160 / fail 0 / skipped 103 / cancelled 0 / duration 158629ms"
+    },
+    {
+      "cmd": "node e2e/e2e-ci-smoke.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "24 passed, 0 failed"
+    },
+    {
+      "cmd": "node e2e/e2e-federation.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "9/9 passed（含 max_find_docs 内嵌路径 qmd://…、gitnexus 会话复用、legacy 别名）"
+    },
+    {
+      "cmd": "node e2e/e2e-fed-perf.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "9/9 PASS（T2b qmd hit shape 命中；T3 1st 1153ms → 2nd 144ms；T5 semantic 459ms）"
+    },
+    {
+      "cmd": "node e2e/e2e-dashboard.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "5/5（含 /app.js bundle 断言；端口从 stderr 读，不再写死 24688）"
+    },
+    {
+      "cmd": "node e2e/e2e-live-scenario.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "8/8（P1 会话登记 requests=0；P3 计数 ≥3；qmd/gitnexus 后端确实被调用）"
+    },
+    {
+      "cmd": "node e2e/e2e-idempotent.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "9/9（5 会话后提示词仍 1 块、ICM 块完整、首查建图一次、后续 20ms 直连、编辑后增量命中新符号 235ms）"
+    },
+    {
+      "cmd": "node e2e/e2e-backend-hotplug.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "9/9（点「重试探针」→ tools/list 立刻出现 max_find_docs，发 list_changed 1 次）"
+    },
+    {
+      "cmd": "node e2e/e2e-fed-heartbeat.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "3/3（不点任何按钮，等失败 TTL 30s + 心跳 → 收到 list_changed 且工具出现）"
+    },
+    {
+      "cmd": "node e2e/ui-interact.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "27/27（零 pageerror / 零 console error；新增 10b 轮询速率上界断言）"
+    },
+    {
+      "cmd": "node e2e/panel-load.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "10/10 — 串行 p50: /stats 2.7 / /tail 1.2 / /sessions 1.4 / /storage 1.3 / /fresh 1.5 ms；50 并发 ×3 轮 12987 请求 721.5 req/s 中位 p50 69.2 / p95 83.8 / p99 105.2 ms 零错误；/storage 20 并发 p99 14.4ms；压力下 /healthz p99 1.7ms"
+    },
+    {
+      "cmd": "docker build -f Dockerfile.max -t graft-max:latest .",
+      "exit_code": 0,
+      "raw_output_tail": "新镜像 9b6cf7e2a03f（3.19GB），回滚点 graft-max:rollback-max9 = 86b9b45851be"
+    },
+    {
+      "cmd": "docker compose -f docker-compose.max.yml up -d && node e2e/verify-compose.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "Recreated + Started；12/12（healthy / 127.0.0.1:24688 / 容器内 0.28.0-max.10 / dist/panel 在镜像里 / healthz 200 / 无令牌 401 / 错误令牌 401 / 带令牌 200 / 页面 Cookie 200 / app.js 17802B / 令牌不在 mcp.log）"
+    },
+    {
+      "cmd": "node e2e/e2e-docker.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "13/13（D1 版本、D5 非 root、D2 握手、D3 真调用、D6 常驻存活、D4a-d 令牌、D4 存储 10 条、令牌不落盘）"
+    },
+    {
+      "cmd": "gh run view 41752856232 -R lza6/graft-Max",
+      "exit_code": 0,
+      "raw_output_tail": "conclusion=success；jobs: max gate (ubuntu-latest) success + max gate (windows-latest) success"
+    },
+    {
+      "cmd": "npm pack --ignore-scripts + npm i -g --prefix <空目录> + graft-max --version",
+      "exit_code": 0,
+      "raw_output_tail": "graft-max-0.28.0-max.10.tgz 3.4MB / 1539 文件；全局安装后 --version → 0.28.0-max.10；tgz 内 dist/panel 3 文件 + wasm 9"
+    }
+  ],
+  "self_review_findings": [
+    {
+      "id": "SR-1",
+      "severity": "P2",
+      "finding": "/stats 在同一个请求里调用了两次 liveSessions()（一次取 requests、一次经 knownRoots()），50 并发下等于 100 次/秒的重复文件读",
+      "fix": "knownRoots(primary, sessions?) 接受已取快照；/stats 只读一次",
+      "evidence": "50 并发 3 轮中位 p95 83.8ms（修复前单轮 86~121ms 抖动）"
+    },
+    {
+      "id": "SR-2",
+      "severity": "P2",
+      "finding": "面板改刷新间隔时若正好有 tick() 在 await，旧轮询链不会被 clearTimeout 掉（旧 id 已 fire），恢复后再挂一个定时器 → 两条链并存，请求频率翻倍",
+      "fix": "startTimer() 加代际号 timerGen，过期的链自行退出",
+      "evidence": "静态确认（按代码读出）；**未构造出复现时序**，E2E 的 10b 只是速率上界断言，不能当回归证明"
+    },
+    {
+      "id": "SR-3",
+      "severity": "P1（CI）",
+      "finding": "仓库 CI 一直红：两条 'advertises every tool' 引用了一个从未实现的 GRAFT_MAX_FEDERATED 开关，且把联邦工具写进固定期望值 → 装了后端的机器多两个、CI runner 少两个，两边都失败",
+      "fix": "真正实现该开关；测试改确定性口径",
+      "evidence": "上一版 CI 日志 not ok 1738/1739（ubuntu+windows）；修复后 test/mcp-server.test.ts 5/5、GitHub gate 双平台 success"
+    },
+    {
+      "id": "SR-4",
+      "severity": "P2",
+      "finding": "/reprobe 无节流：回环免令牌形态下本机任意页面可用 <img src> 触发，而它 spawn 三个探针进程",
+      "fix": "加 2s 节流（GRAFT_MAX_REPROBE_MIN_MS 可配）+ 契约测试",
+      "evidence": "test/dashboard-routes.test.ts 16/16（窗口内第二次必须 429）"
+    },
+    {
+      "id": "SR-5",
+      "severity": "P3",
+      "finding": "三处文档的测试数量口径不一致（9/10/11 个文件、'90+ 断言'）；压测数字三份文档各写一套；serverInfo.name 的 E2E 断言描述与代码不符",
+      "fix": "统一为实测口径（12 文件/107 用例；压测一次真实输出；name 断言补 file:line 并改写结论）",
+      "evidence": "git diff --diff-filter=A c7fd6ab..HEAD -- test/ → 12 文件；grep -c '^test(' → 107"
+    }
+  ],
+  "images": {
+    "new": "graft-max:latest = 9b6cf7e2a03f",
+    "rollback": "graft-max:rollback-max9 = 86b9b45851be"
+  },
+  "limitations": [
+    "两个独立 Critic 子代理均未在本会话内返回结论 → 审查门禁未闭合（workflow_status §8 已如实记录，下一轮 M0 补做）",
+    "上游自带 ci.yml（node 20）的 ubuntu leg 在 4d63b5e 仍失败；本轮新 gate 用 node 22 双平台全绿 → Node 20 特有的上游测试问题，与 Max 改动无关（已记入下轮清单）",
+    "压测为本机单机（Windows + Docker Desktop）；与重活并行时实测会失真（已写进 panel-load.mjs 头注释）",
+    "SR-2 未构造出复现时序，属防御性修复"
+  ]
+}

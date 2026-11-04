@@ -6,7 +6,7 @@
   （Docker Desktop 29.9.2）。零 mock 掉业务逻辑。
 - 被测仓库：`C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code`（有 graft 索引 +
   agentcode qmd 集合 + gitnexus 索引）、`duck2api-hub`、以及各脚本自建的临时仓库。
-- 总表：**12 个脚本，全部全绿**。
+- 总表：**13 个脚本，全部全绿**。
 
 ## 1. 一览
 
@@ -22,7 +22,7 @@
 | `e2e-fault-tolerance.mjs` | 6 | **6/6** | 代码级 | 超时/软错误/永不 throw |
 | `e2e-backend-hotplug.mjs` | 9 | **9/9** | 假 qmd（真 PATH）+ 真面板 | 装完后端 **点「重试探针」** 立刻出现工具 |
 | `e2e-fed-heartbeat.mjs` | 3 | **3/3** | 假 qmd（真 PATH） | 装完后端 **什么都不点**，30s（失败 TTL）后心跳自动发出 `list_changed` |
-| `ui-interact.mjs` | 26 | **26/26** | Playwright | 零 pageerror / 零 console error |
+| `ui-interact.mjs` | 26 | **27/27** | Playwright | 零 pageerror / 零 console error |
 | `panel-load.mjs` | 10 | **10/10** | 真实 server | 串行/50 并发/事件循环未堵 |
 | `e2e-docker.mjs` | 13 | **13/13** | Docker | 镜像版本/非 root/MCP/令牌/健康检查 |
 | `verify-compose.mjs` | 12 | **12/12** | Docker（compose 实例） | 部署后冒烟：端口回环/令牌/面板资源 |
@@ -41,7 +41,7 @@
 
 ## 3. 面板（真实浏览器，Playwright）
 
-26 条断言全绿，关键几条：
+27 条断言全绿，关键几条：
 
 | 断言 | 实测 |
 |------|------|

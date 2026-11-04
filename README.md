@@ -334,7 +334,7 @@ node e2e/e2e-federation.mjs    # 9/9（需真实 qmd/gitnexus）
 node e2e/e2e-dashboard.mjs     # 4/4
 node e2e/e2e-live-scenario.mjs # 8/8
 node e2e/e2e-idempotent.mjs    # 9/9
-node e2e/ui-interact.mjs       # 26/26（Playwright，零 JS 错误；需先 build）
+node e2e/ui-interact.mjs       # 27/27（Playwright，零 JS 错误；需先 build）
 node e2e/e2e-backend-hotplug.mjs # 9/9（后端热插拔：点重探即生效）
 node e2e/e2e-fed-heartbeat.mjs   # 3/3（不点按钮：30s 后心跳自动发现）
 ```
