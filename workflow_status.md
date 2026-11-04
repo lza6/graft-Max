@@ -174,6 +174,13 @@ SOP 落地：`docs-selfdev/上游同步SOP.md`（热路径 10 文件清单、步
 | 部署热更新 | done（镜像重建 → compose 重建 → verify-compose 12/12；回滚点 `graft-max:rollback-max10`） | 命令输出 |
 | GitHub CI（gate） | **success 双平台**（`99b4894`；含 tsc/build/版本断言/打包完整性/**覆盖率门禁**/冒烟 E2E，ubuntu 另跑 `npm test`） | run 4179xxxx |
 | GitHub CI（上游 `ci.yml`） | 报告时仍在跑（node 20 × 双 OS × 两轮重试；本地全量与 Linux 容器均已 0 fail） | 见 §6 |
+
+> **CI 排队的真实原因（已确认，不是"卡住"）**：`ci-max.yml`/`ci.yml` 都设了
+> `concurrency.cancel-in-progress: true`，本会话为了修跨平台测试连续推送了多次，
+> 每次推送都会**取消上一条在跑的 run**，于是列表里长期显示 in_progress。
+> 发行版所指提交 `99b4894` 的 gate 已实测 **success 双平台**；其后的 3 个提交
+> 只改文档/门禁脚本，队列消化完会给出同样结论。
+> **下轮改进（已写进 v5 指南 K2）**：给纯文档路径加 `paths-ignore`，避免用 gate 分钟数换一次格式检查。
 | 压测（max.11） | 50 并发 3 轮中位 **p95 59.6ms** / 1054.6 req/s / 零错误；`/storage` 20 并发 p99 13.8ms；`/healthz` 压力下 p99 3.4ms | `e2e/panel-load.mjs` 10/10 |
 | M1/M2/M17 发布 | blocked（无 npm/Docker Hub 账号） | — |
 | M3/M6/M12 | 未启动（P3 观察项/大改，指南允许按需） | — |
