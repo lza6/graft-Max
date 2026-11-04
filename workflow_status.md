@@ -200,6 +200,19 @@ M9 用例与同文件其它用例共享"首次写"状态。修完后 Linux 容�
 **额外修复的真 bug（本轮发现）**：fed-semantic 非 JSON 输出死路径（filter 空→'{}'→假性 no-hits）；
 atomicWrite 并发 rename EPERM（Windows 多进程写 sessions.json 真实发生）。
 
+## 7.6 max.12 补丁（2026-11，日志归因引出）
+
+| 项 | 结果 |
+|----|------|
+| **真事故：fork 抢上游槽位** | `GRAFT_MAX_MCP=1` 时每次 boot 把项目 `.mcp.json` 的 `mcpServers.graft` 从 `npx -y @nanonets/graft mcp` 改写成本机 `dist/cli.js`（并留 `.bak`）→ 违反 `项目约束.md` §1.5 |
+| 根因 | `serverEntry()` 只判开关即返回本机路径，而 upkeep 写的是上游槽位 |
+| 修法 | `serverEntry({ slot })` 显式区分槽位；只有 `graft-max` 槽位才允许本机路径 |
+| 回归 | `test/max-slot-isolation.test.ts` 5/5 + 端到端 3/3（槽位不变 / 无 .bak / 单槽位） |
+| 版本 / 发布 | `0.28.0-max.12`，tag `v0.28.0-max.12` + GitHub Release（tarball 1541 文件） |
+| 部署 | 镜像重建 + compose 热更新 → `verify-compose` 12/12；回滚点 `graft-max:rollback-max11` |
+| 新工具 | `scripts/log-attribution.mjs`（真实/沙箱分组、`--json`/`--root`/`--recent`）+ `docs-selfdev/日志归因.md`（683 会话段首次归因） |
+| 全量测试 | **4297 tests / 4192 pass / 0 fail** |
+
 ## 8. 独立审查（状态：部分完成，如实记录）
 
 | 项 | 事实 |
