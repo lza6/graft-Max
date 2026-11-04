@@ -335,6 +335,10 @@ node e2e/e2e-dashboard.mjs     # 4/4
 node e2e/e2e-live-scenario.mjs # 8/8
 node e2e/e2e-idempotent.mjs    # 9/9
 node e2e/ui-interact.mjs       # 27/27（Playwright，零 JS 错误；需先 build）
+
+# E2E 仓库选择：默认服务本仓库；想测别的仓库设 E2E_ROOT：
+#   E2E_ROOT=C:/path/to/repo node e2e/e2e-federation.mjs
+# （e2e-duck-hub 默认仍指本机 duck2api-hub——它有 ccc 索引，别的机器没有就如实 FAIL）
 node e2e/e2e-backend-hotplug.mjs # 9/9（后端热插拔：点重探即生效）
 node e2e/e2e-fed-heartbeat.mjs   # 3/3（不点按钮：30s 后心跳自动发现）
 ```
