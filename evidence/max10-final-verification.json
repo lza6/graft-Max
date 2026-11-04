@@ -3,7 +3,7 @@
   "title": "max.10 交付前最终验证（权威数字，全部在本会话内真实执行）",
   "status": "done",
   "timestamp": "2026-11-04T09:40:00+08:00",
-  "commit_under_test": "6b0fe85 + 后续 3 个本地提交（面板 timerGen / 断言标注 / 文档口径）",
+  "commit_under_test": "099c470（tag v0.28.0-max.10 所指提交；含 Critic 修复 + 审查闭环）",
   "commands_executed": [
     {
       "cmd": "npx tsc --noEmit",
@@ -94,6 +94,16 @@
       "cmd": "npm pack --ignore-scripts + npm i -g --prefix <空目录> + graft-max --version",
       "exit_code": 0,
       "raw_output_tail": "graft-max-0.28.0-max.10.tgz 3.4MB / 1539 文件；全局安装后 --version → 0.28.0-max.10；tgz 内 dist/panel 3 文件 + wasm 9"
+    },
+    {
+      "cmd": "docker build (99ac9e8) + docker compose up -d + node e2e/verify-compose.mjs + node e2e/e2e-docker.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "镜像 3f0e4001679e；部署冒烟 12/12（healthy / 127.0.0.1 / max.10 / panel 资源 / 令牌 401-200 / 令牌不落盘）；Docker E2E 13/13"
+    },
+    {
+      "cmd": "node e2e/panel-load.mjs + node e2e/e2e-ci-smoke.mjs + node e2e/ui-interact.mjs（发布构建上）",
+      "exit_code": 0,
+      "raw_output_tail": "panel-load 10/10（本轮吞吐 1134.9 req/s /healthz p99 0.9ms）；ci-smoke 24/24；ui-interact 27/27"
     }
   ],
   "self_review_findings": [
@@ -148,7 +158,7 @@
     }
   ],
   "images": {
-    "new": "graft-max:latest = 9b6cf7e2a03f",
+    "new": "graft-max:latest = 3f0e4001679e（构建自 99ac9e8）",
     "rollback": "graft-max:rollback-max9 = 86b9b45851be"
   },
   "limitations": [
