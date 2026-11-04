@@ -169,7 +169,10 @@ export function flushTimeline(): Promise<void> {
         }
         done(false);
       }, icmTimeoutMs());
-      timer.unref?.();
+      // 注意：**不能** unref。unref 后若进程此时没别的活干，事件循环会直接排空，
+      // 超时回调永远不跑 → 子进程不被 kill、批次的 Promise 永远 pending
+      // （Ubuntu CI 上就是这么炸的：`Promise resolution is still pending but the
+      // event loop has already resolved`）。5s 的上限本身可接受，让它保持进程存活。
       child.on('error', () => {
         clearTimeout(timer);
         done(false);

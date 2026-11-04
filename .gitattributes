@@ -1,0 +1,13 @@
+# 统一行尾策略。为什么需要这个文件：
+#   Windows 上 core.autocrlf=true（Git for Windows 默认）会把工作区文本转成 CRLF，
+#   于是"逐字节比较"的 fixture 在 CI 上拿到 \r\n、在开发机上拿到 \n，测试两边必有一边红
+#   （实测：fed-qmd 的 8 条用例只在 windows-latest 失败）。
+
+* text=auto
+
+# 逐字节比较用的 fixture：一律不做行尾转换，仓库里存什么字节，检出就是什么字节
+test/fixtures/** -text
+
+# 脚本与 hook 必须是 LF（sh 解释器对 CRLF 会报错）
+*.sh            text eol=lf
+.githooks/*     text eol=lf
