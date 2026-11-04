@@ -1,0 +1,57 @@
+{
+  "task_id": "max10-batch-c",
+  "title": "批次 C · 能力扩展（N11 多仓库 / N12 后端自助安装 / N13 冷启动 / N14 新鲜度）",
+  "status": "done",
+  "timestamp": "2026-11-04T08:50:00+08:00",
+  "decision": "N11 采用【方案 A：单进程多 root】（用户拍板，2026-11-04）。落地形态：dashboard 不再只认自己被启动时的那一个 root，而是 knownRoots() = 主 root + 所有活跃会话 cwd（归一去重）。多仓库的 MCP server 各自起面板（端口自动 +1..+9），共享同一份 sessions.json，所以任一面板都能看全部仓库。",
+  "commands_executed": [
+    {
+      "cmd": "node --import tsx --test test/first-build-wait.test.ts",
+      "exit_code": 0,
+      "raw_output_tail": "tests 6 / pass 6 / fail 0 — 默认 20s 窗口（GRAFT_MAX_FIRST_BUILD_WAIT_MS 覆盖生效）；超时 note 含 'still running after Ns' 与重试指引；building.json 由建图进程写/删（抛错也删）；12 分钟前的残留判 stale 且不算 building"
+    },
+    {
+      "cmd": "node --import tsx --test test/graph-refresh.test.ts",
+      "exit_code": 0,
+      "raw_output_tail": "tests 26 / pass 22 / fail 0 / skipped 4（Windows 无 chmod/SIGTERM，上游既有 skip）— 首查建图三态（hold/copy/fail）全部保持"
+    },
+    {
+      "cmd": "node e2e/e2e-backend-hotplug.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "9/9 PASS — 未装 qmd 时 max_find_docs 被隐藏（7 个工具）；面板 fedHealth 报 qmd ok=false + retryInMs 29622；改成 exit 0 后 GET /reprobe → qmd ok=true；不重启会话 tools/list 出现 max_find_docs（8 个工具）；发出 notifications/tools/list_changed 1 次；max_find_docs 真实可调用（返回 fake qmd 版本）"
+    },
+    {
+      "cmd": "node -e '(fetch) /storage /fresh /stats' (端口 24691 实例)",
+      "exit_code": 0,
+      "raw_output_tail": "/storage 200 {root,entries,roots:[{root,entries}]} ; /fresh 200 [{root,state:'clean',changed:0,...}] ; /stats 200 含 version/port/roots/building[]/toolStats/fedHealth/fedCache"
+    },
+    {
+      "cmd": "node e2e/ui-interact.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "26/26 — 存储卡'按仓库分组' 1 组 + 10 行可复制；新鲜度卡 1 行带'同步'标签；联邦后端卡 3 行（无重复探针，读缓存）"
+    }
+  ],
+  "files_changed": [
+    "src/graph/refresh.ts (FIRST_BUILD_WAIT_MS 90s→20s；GRAFT_MAX_FIRST_BUILD_WAIT_MS；不再由等待者删 building.json；新增 buildingStatus() 只读接口 + 陈旧判定)",
+    "src/claude/sync-run.ts (building.json 的唯一所有者：claimLock 后写、finally 删)",
+    "src/mcp/dashboard.ts (knownRoots() 多仓库；/fresh 端点；/reprobe 端点 + setToolsRefreshHook；/stats 加 roots/building[]/version/port；/storage 返回 roots 分组；storage 缓存按 root 分桶)",
+    "src/mcp/federation.ts (fedBackendHealth() 只读探针快照 + reprobeBackends())",
+    "src/mcp/server.ts (onBackendsChanged → federated.refresh()；startFedProbeWatch() 60s 心跳；setToolsRefreshHook；GRAFT_MAX_FED_WATCH=0 可关)",
+    "panel/main.ts (工具耗时卡 p50/p95、联邦后端卡 + 重试探针按钮、新鲜度卡、存储按仓库分组)",
+    "e2e/e2e-backend-hotplug.mjs (new)",
+    "test/first-build-wait.test.ts (new)",
+    "test/dashboard-routes.test.ts (加 /fresh 断言)"
+  ],
+  "tasks": {
+    "N11": "done — 一张面板看全部仓库（knownRoots + /storage roots 分组 + 存储缓存按 root 分桶）",
+    "N12": "done — 面板「联邦后端」卡（状态/探针时间/安装命令/复制）+ 重试探针 + 探针 TTL + list_changed；真实热插拔 E2E 9/9",
+    "N13": "done — 首查等待 90s→20s（env 覆盖）+ 带进度的 note + building.json 生命周期归建图进程（P3-9）",
+    "N14": "done — 索引新鲜度卡（/fresh：clean/drift/unknown + 改增删数 + 上次同步时间，30s 缓存）"
+  },
+  "limitations": [
+    "N11 方案 A 的边界：面板聚合的是'活会话的仓库'，没有会话的仓库不会显示（这是刻意的——面板不主动扫盘）",
+    "建图进度只精确到'已耗时 N 秒 + 哪个仓库'，没有'已解析 X/Y 文件'（build 侧目前不暴露中途计数，指南允许'若 build 侧能提供'才做）",
+    "N12 的自动发现依赖 60s 心跳 + 探针 TTL（成功 5min/失败 30s），最坏情况约 90s 才自动出现；点「重试探针」是即时的",
+    "热插拔 E2E 用假 qmd 二进制验证探针/通知链路，未验证真实 qmd 安装过程"
+  ]
+}

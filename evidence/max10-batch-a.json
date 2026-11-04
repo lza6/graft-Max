@@ -1,0 +1,95 @@
+{
+  "task_id": "max10-batch-a",
+  "title": "批次 A · 缺陷清算与回归网（N0–N7 + P3 清理）",
+  "status": "done",
+  "timestamp": "2026-11-04T08:30:00+08:00",
+  "environment": {
+    "os": "Windows 11 (DESKTOP-EGNE9ND)",
+    "node": "v25.8.1",
+    "repo": "D:/自研工具/graft-Max",
+    "version_before": "0.28.0-max.9"
+  },
+  "commands_executed": [
+    {
+      "cmd": "npx tsc --noEmit",
+      "exit_code": 0,
+      "raw_output_tail": "(no output) — 类型 0 错误"
+    },
+    {
+      "cmd": "node --import tsx --test test/devlog-sessions.test.ts",
+      "exit_code": 0,
+      "raw_output_tail": "tests 9 / pass 9 / fail 0 — P1-5 同 pid 不同 host 只改本机行；10 次 bump 不在热路径落盘、flush 一次写 10；GET 不写盘；坏 JSON 自愈；跨 host 3 分钟判活"
+    },
+    {
+      "cmd": "node --import tsx --test test/icm-timeline.test.ts",
+      "exit_code": 0,
+      "raw_output_tail": "tests 9 / pass 9 / fail 0 — 10 次调用 → JSONL 10 行 + spawn 0 次；满 32 行自动 flush；GRAFT_MAX_ICM=0 全关；真参数 store -t tool-timeline -c <批量>；exit!=0 / error / 40ms 超时 均丢批次且 kill"
+    },
+    {
+      "cmd": "node --import tsx --test test/devlog-i18n.test.ts",
+      "exit_code": 0,
+      "raw_output_tail": "tests 6 / pass 6 / fail 0 — 修复 dlogBlock 绕过汉化层（P3-3 真正根因）"
+    },
+    {
+      "cmd": "node --import tsx --test test/atomic-write.test.ts test/max-prompt.test.ts test/fed-qmd.test.ts test/fed-cache.test.ts test/fed-robustness.test.ts test/dashboard-security.test.ts test/ignored-files.test.ts",
+      "exit_code": 0,
+      "raw_output_tail": "tests 60 / pass 60 / fail 0 — 含：握手后 listenerCount('data')===0；探针 30s/5min TTL；8MB stdout kill；qmd 格式与真实 CLI fixture 逐字符相等；大小写重复键不丢"
+    },
+    {
+      "cmd": "curl -H 'Host: evil.example.com' http://127.0.0.1:24689/stats ; curl http://127.0.0.1:24689/tail ; curl 'http://127.0.0.1:24689/tail?token=testtoken123' ; curl -H 'Authorization: Bearer testtoken123' /stats ; curl /healthz",
+      "exit_code": 0,
+      "raw_output_tail": "403 / 401 / 200 / 200 / 200；安全头 x-content-type-options: nosniff, referrer-policy: no-referrer, x-frame-options: DENY, content-security-policy: default-src 'self'; ...；GET /?token= 返回 set-cookie: gm_ui=testtoken123; HttpOnly; SameSite=Strict; Path=/；stderr 打 [graft-Max] dashboard: http://127.0.0.1:24689/?token=testtoken123"
+    },
+    {
+      "cmd": "node e2e/e2e-ci-smoke.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "CI smoke E2E: 24 passed, 0 failed — initialize/tools-list/真建图/真查询/会话落盘/日志汉化/ICM JSONL/干净退出"
+    },
+    {
+      "cmd": "npm run build && node dist/cli.js --version",
+      "exit_code": 0,
+      "raw_output_tail": "viewer bundle → dist/viewer/ ; grammar queries → dist/graph/queries/ (17 .scm) ; vendored grammars (9 wasm) ; 0.28.0-max.9"
+    }
+  ],
+  "files_changed": [
+    ".gitignore (memories.db* / *.db.backup-* / .mcp.json / .trail/)",
+    ".githooks/pre-commit (new)",
+    "scripts/check-forbidden-files.mjs (new)",
+    "scripts/install-hooks.mjs (new)",
+    "src/util/atomic-write.ts (new)",
+    "src/mcp/icm-timeline.ts (new)",
+    "src/mcp/devlog.ts (host+pid 身份 / 2s 计数节流 / 读路径无写 / dlogBlock 汉化 / 自净挪到写路径)",
+    "src/mcp/server.ts (ICM 批量化接线 / P3-1 / P3-2 / 退出 flush)",
+    "src/mcp/fed-qmd.ts (formatResults 唯一实现，对齐 CLI)",
+    "src/mcp/federation.ts (settle 摘监听器 / probe TTL / 8MB 上限 / 键序缓存 / 计数 / cwd 分桶)",
+    "src/hosts/max-prompt.ts, claude-global.ts, mcp-config.ts (atomicWriteSync)",
+    "src/mcp/dashboard.ts (Host 校验 / 令牌 / 安全头 / healthz)",
+    "docker-compose.max.yml (127.0.0.1 端口 + /healthz)",
+    "Dockerfile.max (注释)",
+    ".github/workflows/ci-max.yml (new)",
+    "e2e/e2e-ci-smoke.mjs (new)",
+    "e2e/e2e-fed-perf.mjs (断言加强)",
+    "test/{devlog-sessions,devlog-i18n,icm-timeline,atomic-write,max-prompt,fed-qmd,fed-cache,fed-robustness,dashboard-security,ignored-files}.test.ts (new)"
+  ],
+  "tasks": {
+    "N0": "done — 隐私加固（.gitignore + pre-commit + 备份移出仓库；git check-ignore 真命中）",
+    "N1": "done — 面板安全（403/401/200 三连实测 + 安全头 + 回环端口 + healthz）",
+    "N2": "done — atomicWrite 统一 11 处用户全局文件写入（max-prompt 5 / claude-global 4 / mcp-config 2）",
+    "N3": "done — ICM 批量化（32 行/60s、5s 超时、并发 1、先落 JSONL、=0/=2 开关）",
+    "N4": "done — devlog host+pid 身份 + 计数节流 + 读路径去写 + 自净",
+    "N5": "done — fed-qmd 输出契约对齐真实 CLI（fixture 逐字符）",
+    "N6": "done — 握手摘监听器 / probe TTL / 8MB 上限 / 键序缓存 / 缓存计数 / cwd 分桶",
+    "N7": "done（本批）— 10 个新单测文件；dashboard-routes 在批次 B 补齐 ← 见 max10-batch-b",
+    "P3-1": "done — server.ts 两支同体 if/else 简化",
+    "P3-2": "done — ensurePromptBlock 接到 tools/list（60s 节流）",
+    "P3-3": "done — 根因是 dlogBlock 不汉化；修根因 + 删两条真死规则 + 加真实日志行测试",
+    "P3-4": "done — cacheKey 键排序（stableStringify）",
+    "P3-5": "done — liveSessions 去写副作用",
+    "P3-6": "done — getFedCacheStats() 暴露到 /stats",
+    "P3-7": "done — gnx 会话按 cwd 分桶"
+  },
+  "limitations": [
+    "N7 的 dashboard-routes.test.ts 在批次 B（拆前端工程后形状才稳定）里完成，见 max10-batch-b.json",
+    "P3-16（工作区脏改动 / 根目录重复文档）在收尾提交时处理"
+  ]
+}

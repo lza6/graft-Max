@@ -33,3 +33,13 @@ transcripts/
 
 # The @trailhq/trail package, laid out by scripts/pack-trail.mjs.
 /build/
+
+# [graft-Max] 个人记忆库（ICM 运行时数据，含跨项目上下文）——绝不入库
+memories.db
+memories.db-wal
+memories.db-shm
+*.db.backup-*
+# 本机级 MCP 配置（每台机器不同），不入库
+.mcp.json
+# 本地 trail 运行时数据
+.trail/
