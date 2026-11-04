@@ -539,6 +539,10 @@ async function freshness(roots: string[]): Promise<FreshInfo[]> {
  */
 let toolsRefreshHook: (() => void) | null = null;
 
+/** [N12] /reprobe 的最小间隔：防"本机任意页面 spam 触发子进程"。 */
+const REPROBE_MIN_INTERVAL_MS = 2000;
+let lastReprobeAt = 0;
+
 /** 注册"重探后刷新工具列表"的回调（server.ts 调用；测试也能用它断言被叫到）。 */
 export function setToolsRefreshHook(fn: (() => void) | null): void {
   toolsRefreshHook = fn;
@@ -628,6 +632,14 @@ export function startDashboard(explicitPort?: number, root = process.cwd()): Ser
       } else if (url.pathname === '/reprobe') {
         // [N12] 显式重探联邦后端：装完东西不用重启 session。
         // 注意（安全边界）：这里**只**跑各后端的 --version 探针，绝不执行安装命令。
+        // 节流 2s：回环免令牌形态下，任何本机页面都能用 <img src> 触发这个端点，
+        // 不节流就等于给了一个"无限 spawn 子进程"的按钮。
+        const now = Date.now();
+        if (now - lastReprobeAt < REPROBE_MIN_INTERVAL_MS) {
+          json(res, 429, { error: 'reprobe throttled', retryInMs: REPROBE_MIN_INTERVAL_MS - (now - lastReprobeAt) });
+          return;
+        }
+        lastReprobeAt = now;
         const backends = await reprobeBackends();
         // 装完就能用：叫醒 tools/list（不发这一步，用户会以为"重试没用"）
         try {

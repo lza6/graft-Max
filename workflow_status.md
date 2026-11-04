@@ -22,7 +22,7 @@
 | A3 | `npm test` 总 fail = 0（基线不得回退） | done | **4261 tests / 4158 pass / 0 fail / 103 skipped**，exit 0（max.9: 4156/4053/0） |
 | A4 | 联邦 E2E 真实通过 | done | `e2e-federation` 9/9、`e2e-fed-perf` 9/9（含内嵌路径 `qmd://agentcode/README.md:20 #101e06` 断言） |
 | A5 | 面板 UI 真实浏览器验收 ≥12 条 | done | `ui-interact` **26/26**，零 pageerror / 零 console error，截图 `e2e/ui-interact.png` |
-| A6 | Docker 部署真实可用 | done | 见 §4（重建镜像 → 热更新 → 容器 E2E 9/9） |
+| A6 | Docker 部署真实可用 | done | `e2e-docker` **13/13**（新镜像 max.10）；`verify-compose` **12/12**（热更新后的真实实例） |
 | A7 | 面板端点压测有数据且不劣化 | done | 串行 p50 `/stats` 3.7ms、`/tail` 1.4ms、`/storage` 1.1ms；50 并发 p95 **86.5ms**（max.9: 108ms）；697 req/s；零错误 |
 | A8 | 文档与实现一致 | done | README / CHANGELOG / `docs-selfdev/*` / `test_ledger.md` / `policy.md` 同步 |
 | A9 | 安全三连实测 | done | Host 伪造 403 / 无令牌 401 / 容器端口只绑 `127.0.0.1` |
@@ -75,7 +75,8 @@ node e2e/e2e-fault-tolerance.mjs      6/6
 node e2e/e2e-backend-hotplug.mjs      9/9
 node e2e/ui-interact.mjs              26/26（零 pageerror）
 node e2e/panel-load.mjs               10/10（见 A7）
-node e2e/e2e-docker.mjs               9/9（重建镜像后，见下）
+node e2e/e2e-docker.mjs               13/13（新镜像 max.10，含令牌 401/200 与非 root）
+node e2e/verify-compose.mjs           12/12（部署后真实实例：端口回环/令牌/面板资源/令牌不落盘）
 ```
 
 压测（`e2e/panel-load.mjs`，本机单机）：
@@ -86,12 +87,25 @@ node e2e/e2e-docker.mjs               9/9（重建镜像后，见下）
 压力下 /healthz p99 3ms（事件循环未被目录遍历堵死）
 ```
 
-Docker 热更新：
+Docker 热更新（`docker-compose.max.yml`）：
 ```
-回滚镜像      graft-max:rollback-max9（= 旧 86b9b45851be，3.19GB）
-重建          docker build -f Dockerfile.max -t graft-max:latest .
-热更新        docker compose up -d（端口从 0.0.0.0:24688 改为 127.0.0.1:24688）
-容器 E2E      node e2e/e2e-docker.mjs → 9/9
+回滚点        docker tag graft-max:latest graft-max:rollback-max9（= 旧 86b9b45851be）
+重建          docker build -f Dockerfile.max -t graft-max:latest .   → 6bc461a8082c
+热更新        docker compose -f docker-compose.max.yml up -d        → Recreated + Started
+端口变化      BEFORE 0.0.0.0:24688->24688  →  AFTER 127.0.0.1:24688->24688
+容器 E2E      node e2e/e2e-docker.mjs       → 13/13
+部署冒烟      node e2e/verify-compose.mjs   → 12/12（healthy / max.10 / 401 / 200 / app.js / 令牌不落 mcp.log）
+回滚命令      docker tag graft-max:rollback-max9 graft-max:latest && docker compose up -d
+```
+
+打包（N15）：
+```
+npm pack                 graft-max-*.tgz 3.4MB / 1531 文件
+tar 清单                 wasm=9 · dist/vendor=17 · dist/viewer=3 · dist/graph/queries=17
+npm i -g --prefix <空目录> ./graft-max-*.tgz   →  added 28 packages
+graft-max --version      0.28.0-max.（正确）
+graft-max build .        微型仓库建图成功（无 devDeps，走 vendored wasm）
+graft-max viz --port ..  / => 200 2417B ; /app.js => 200 35825B
 ```
 
 ## 5. 审查发现
@@ -115,10 +129,18 @@ Docker 热更新：
 - 面板 "建图进度" 只到"已耗时 N 秒 + 仓库"，没有文件级进度（build 侧未暴露中途计数）。
 - `GRAFT_MAX_UI_LEGACY=1` 的旧内联页面保留一个 release 周期（按指南 D-5）。
 
-## 7. 上游同步（N18）
+## 7. 上游同步（N18，已真合并）
 
-`git fetch upstream && git merge upstream/main` 试合并结果、冲突热点与解决 SOP 见
-`docs-selfdev/上游同步SOP.md`（含"这 10 个文件是热路径，改之前先算同步成本"）。
+```
+合并前  git rev-list --left-right --count HEAD...upstream/main → 28 1
+        （落后 1 个提交：ca20a67 "Point the README website badge at trailhq.com/trail-code"）
+试合并  git merge-tree --write-tree HEAD upstream/main → exit=1，只报 CONFLICT README.md
+真合并  git merge upstream/main → 1 文件 1 处冲突
+解决    取 ours（我们整篇重写了 README，上游只改了一行徽章链接，那段内容在我们版本里不存在）
+合并后  HEAD...upstream/main → 32 0（不再落后）；tsc 0 错误 / build 成功 / 版本 max.10 / CI smoke 24/24
+```
+
+SOP 落地：`docs-selfdev/上游同步SOP.md`（热路径 10 文件清单、步骤、判定标准、4 条反模式、本次记录）。
 
 ## 8. 独立审查
 

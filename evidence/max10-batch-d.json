@@ -1,0 +1,96 @@
+{
+  "task_id": "max10-batch-d",
+  "title": "批次 D · 发布与运维工程化（N15 打包完整性 / N16 CI 门禁 / N17 发布=blocked / N18 上游同步）+ 部署热更新 + 压测",
+  "status": "done（N17 标 blocked：无 npm/Docker Hub 账号，按用户指示走本地闭环）",
+  "timestamp": "2026-11-04T09:05:00+08:00",
+  "commands_executed": [
+    {
+      "cmd": "npm pack --pack-destination /tmp/gm-pack",
+      "exit_code": 0,
+      "raw_output_tail": "graft-max-0.28.0-max.9.tgz 3375069 B / total files: 1531（打这个包时版本号还没进位）"
+    },
+    {
+      "cmd": "tar -tzf graft-max-0.28.0-max.9.tgz | grep -c 'wasm$' ; ... | grep -c 'dist/vendor' ; ... | grep -c dist/viewer",
+      "exit_code": 0,
+      "raw_output_tail": "wasm=9（tree-sitter-go/java/kotlin/php/python/r/swift/tsx/typescript）；dist 文件 1513；dist/vendor 17（9 wasm + 8 LICENSE）；dist/viewer 3（app.js/index.html/style.css）→ 运行时资源齐全"
+    },
+    {
+      "cmd": "npm i -g --prefix /tmp/gm-global /tmp/gm-pack/graft-max-0.28.0-max.9.tgz ; /tmp/gm-global/graft-max.cmd --version",
+      "exit_code": 0,
+      "raw_output_tail": "added 28 packages in 14s ; 0.28.0-max.9（干净 prefix 全局安装可用；bin: graft / graft-max / trail 都在）"
+    },
+    {
+      "cmd": "（全局安装目录）graft-max.cmd build . 于临时仓库 ; grep-max.cmd viz --port 24777 . + fetch / 与 /app.js",
+      "exit_code": 0,
+      "raw_output_tail": "build: ✓ wiring: 2 nodes (1 file, 1 function), 1 edges, 1 cards [typescript]（无 devDeps 也能解析 → vendored wasm 生效）；viz: http://127.0.0.1:24777/ => 200 2417B（HTML）、/app.js => 200 35825B"
+    },
+    {
+      "cmd": "node e2e/panel-load.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "10/10 — 串行 p50: /stats=3.7 /tail=1.4 /sessions=1.1 /storage=1.1 /fresh=1.1 ms；50 并发 6s 4181 请求 696.8 req/s p50 70.8 p95 86.5 p99 120.1 错误 0；/storage 20 并发 p99 14.2ms；压力下 /healthz p99 3ms"
+    },
+    {
+      "cmd": "git tag graft-max:latest graft-max:rollback-max9 (docker tag) ; docker build -f Dockerfile.max -t graft-max:latest .",
+      "exit_code": 0,
+      "raw_output_tail": "回滚镜像 graft-max:rollback-max9 = 旧 86b9b45851be (3.19GB)；新镜像 6bc461a8082c (3.19GB)，构建 export 42.9s"
+    },
+    {
+      "cmd": "node e2e/e2e-docker.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "13/13 — D1 版本 0.28.0-max.10；D5 uid=node；D2 initialize server=graft v=0.28.0-max.10；D2 tools/list 六个 max_*；D3 真实工具调用 isError=false；D6 常驻存活 State.Running=true；D4a 强制令牌；D4b 无令牌 401；D4c /healthz 200；D4d 带令牌 200；D4 /stats requests=0 fedHealth=3；D4 /storage 10 条；D4 令牌不落 mcp.log"
+    },
+    {
+      "cmd": "docker compose -f docker-compose.max.yml up -d",
+      "exit_code": 0,
+      "raw_output_tail": "BEFORE: graft-max-dashboard Up 6 hours (healthy) 0.0.0.0:24688->24688/tcp → Recreate/Recreated/Starting/Started；AFTER: Up (healthy) 127.0.0.1:24688->24688/tcp"
+    },
+    {
+      "cmd": "node e2e/verify-compose.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "12/12 — compose healthy；端口只绑 127.0.0.1；容器内 0.28.0-max.10；镜像含 dist/panel/；/healthz 200；无令牌 /stats 401；日志有带令牌 URL；带令牌 /stats 200 且 fedHealth=3；错误令牌 401；页面自举 Cookie 200；/app.js 17802B；令牌不在 mcp.log"
+    },
+    {
+      "cmd": "git fetch upstream ; git rev-list --left-right --count HEAD...upstream/main ; git merge-tree --write-tree HEAD upstream/main",
+      "exit_code": 0,
+      "raw_output_tail": "合并前 28 1（落后 1 个提交 ca20a67 = README 徽章链接）；merge-tree exit=1 且只报 CONFLICT README.md（1 文件 1 处）"
+    },
+    {
+      "cmd": "git merge upstream/main ; git checkout --ours README.md ; git commit",
+      "exit_code": 0,
+      "raw_output_tail": "合并提交 1c2ecad；解决后 git rev-list --left-right --count HEAD...upstream/main → 32 0（不再落后）；冲突原因：我们整篇重写了 README，上游只改了一行徽章链接"
+    },
+    {
+      "cmd": "npx tsc --noEmit ; npm run build ; node dist/cli.js --version ; node e2e/e2e-ci-smoke.mjs",
+      "exit_code": 0,
+      "raw_output_tail": "tsc 0 输出；build 成功（panel 17.4KB / 17 scm / 9 wasm）；0.28.0-max.10；CI smoke 24/24"
+    }
+  ],
+  "files_changed": [
+    ".github/workflows/ci-max.yml (new) — tsc + build + 版本断言 + 打包完整性 + 自包含 E2E（ubuntu 额外跑 npm test）",
+    "e2e/panel-load.mjs (new) — 串行/并发/事件循环压测",
+    "e2e/verify-compose.mjs (new) — 部署后冒烟（端口/令牌/资源/令牌不落盘）",
+    "e2e/e2e-docker.mjs (改为 127.0.0.1 发布 + 令牌断言 401/200 + 令牌不落 mcp.log)",
+    "e2e/E2E-REPORT.md (全量重写，11 脚本真实结果)",
+    "docs-selfdev/上游同步SOP.md (new) — 热路径文件清单 + 步骤 + 判定标准 + 反模式 + 本次记录",
+    "package.json (version 0.28.0-max.10)",
+    "README.md / docker-compose.max.yml / Dockerfile.max（见批次 A/B）"
+  ],
+  "deployment": {
+    "rollback_point": "docker 镜像 tag graft-max:rollback-max9（旧 86b9b45851be）",
+    "method": "docker build → docker compose up -d（recreate）→ 灰度即单实例重建",
+    "verified_after_update": "e2e/verify-compose.mjs 12/12；容器内版本 max.10；端口从 0.0.0.0 收到 127.0.0.1；令牌强制生效",
+    "rollback_command": "docker tag graft-max:rollback-max9 graft-max:latest && docker compose -f docker-compose.max.yml up -d"
+  },
+  "tasks": {
+    "N15": "done — 打包完整性：9 wasm + 17 scm + panel + viewer 全在 tgz；干净 prefix 全局安装后 build/viz 可用",
+    "N16": "done（本地等价验证）— ci-max.yml 落地，本地同命令全绿；GitHub 侧真绿勾待 push 后确认",
+    "N17": "blocked — npm publish / Docker Hub 无账号；替代闭环：tarball + 本机 Docker 热更新 + GitHub Release",
+    "N18": "done — 真合并 1 个上游提交，冲突 1 文件 1 处，SOP 落地，合并后不再落后上游"
+  },
+  "limitations": [
+    "GitHub Actions 的真绿勾需要 push 后在 GitHub 侧执行，本轮只做到本地同命令验证",
+    "压测是本机单机（Windows + Docker Desktop），不构成生产并发基准",
+    "npm pack 的版本号是在进位前打的（max.9）；max.10 的包在收尾时重打（见 batch-e 或 CHANGELOG 说明）",
+    "Docker 镜像 3.19GB（含 qmd），INSTALL_CCC/INSTALL_GITNEXUS 仍未实测"
+  ]
+}

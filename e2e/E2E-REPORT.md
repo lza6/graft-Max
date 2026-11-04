@@ -1,102 +1,112 @@
-# E2E 报告 — graft-Max MCP 联邦层
+# E2E 报告 — graft-Max（v0.28.0-max.10）
 
-- 时间：2026-11-02T19:28:50.816Z
-- 方式：**真实 E2E**——node 子进程起 `dist/cli.js mcp`（stdio JSON-RPC），打真实后端（qmd 2.8.3、gitnexus 1.6.12 均为本机全局安装），零 mock
-- 被测仓库：C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code（有 graft 索引 + agentcode qmd 集合 + gitnexus 索引）
-- 结果：**9/9 PASS**
+- 时间：2026-11-04
+- 方式：**全部真实执行**——node 子进程起 `dist/cli.js mcp`（stdio JSON-RPC），真实后端
+  （qmd / gitnexus / ccc 均为本机全局安装），真实浏览器（Playwright 1.64.1），真实容器
+  （Docker Desktop 29.9.2）。零 mock 掉业务逻辑。
+- 被测仓库：`C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code`（有 graft 索引 +
+  agentcode qmd 集合 + gitnexus 索引）、`duck2api-hub`、以及各脚本自建的临时仓库。
+- 总表：**11 个脚本，全部全绿**。
+
+## 1. 一览
+
+| 脚本 | 断言 | 结果 | 依赖 | 说明 |
+|------|------|------|------|------|
+| `e2e-ci-smoke.mjs` | 24 | **24/24** | 仅 dist + 临时仓库 | **自包含**，CI 与任何机器可跑；MCP 全链路 + 落盘证据 |
+| `e2e-federation.mjs` | 9 | **9/9** | 真实 qmd/gitnexus | 联邦三工具 + 软错误 + legacy 别名 |
+| `e2e-fed-perf.mjs` | 9 | **9/9** | 真实 qmd/gitnexus/ccc | 含 T2/T3/T4/T5 性能断言与内嵌路径格式断言 |
+| `e2e-dashboard.mjs` | 5 | **5/5** | 真实 server | 会话/统计/tail/HTML + `/app.js` bundle |
+| `e2e-live-scenario.mjs` | 8 | **8/8** | 真实 server | 模拟用户下一会话看到的画面 |
+| `e2e-idempotent.mjs` | 9 | **9/9** | 真实 server ×5 | 提示词幂等 + 首查建图不重复 + 增量刷新 |
+| `e2e-race.mjs` | 1 | **PASS** | 真实 server ×5 | 并发写 sessions.json 不损坏 |
+| `e2e-fault-tolerance.mjs` | 6 | **6/6** | 代码级 | 超时/软错误/永不 throw |
+| `e2e-backend-hotplug.mjs` | 9 | **9/9** | 假 qmd（真 PATH）+ 真面板 | 装完后端不用重启即出现工具 |
+| `ui-interact.mjs` | 26 | **26/26** | Playwright | 零 pageerror / 零 console error |
+| `panel-load.mjs` | 10 | **10/10** | 真实 server | 串行/50 并发/事件循环未堵 |
+| `e2e-docker.mjs` | 13 | **13/13** | Docker | 镜像版本/非 root/MCP/令牌/健康检查 |
+| `verify-compose.mjs` | 12 | **12/12** | Docker（compose 实例） | 部署后冒烟：端口回环/令牌/面板资源 |
+
+## 2. 联邦层（真实后端）
 
 | 结果 | 用例 | 耗时 | 证据摘要 |
 |------|------|------|---------|
-| ✅ PASS | initialize | 875ms | {"name":"graft","version":"0.28.0-max.1"} |
-| ✅ PASS | tools/list has graft six | 1137ms | graft_find_code,graft_file_api,graft_check_freshness,graft_trace_calls,graft_fin |
-| ✅ PASS | tools/list has max_find_docs (qmd probed OK) | 1137ms | present |
-| ✅ PASS | tools/list has max_trace_arch (gitnexus probed OK) | 1137ms | present |
-| ✅ PASS | max_find_docs real qmd search | 293ms | hits: 1, first: qmd://agentcode/README.md:344 #101e06
-Title: Agent-Code
-Score:   |
-| ✅ PASS | max_trace_arch real gitnexus query | 1244ms | isError=false, text: {
-  "processes": [],
-  "process_symbols": [],
-  "definition |
-| ✅ PASS | max_find_docs empty query → soft isError | 2675ms | max_find_docs requires a query |
-| ✅ PASS | graft_find_code still works | 131ms | graft ask — "federation proxy tools"  (empty)
+| ✅ | initialize | 875ms | `{"name":"graft","version":"0.28.0-max.10"}` |
+| ✅ | tools/list 六件套 | 1137ms | max_find_code…max_repo_map（+ 视后端 0–3 个联邦工具） |
+| ✅ | max_find_docs 真实 qmd 检索（**内嵌路径**） | 7–319ms | `qmd://agentcode/README.md:20 #101e06` + `Title:` + `Score:` |
+| ✅ | max_trace_arch 真实 gitnexus（会话复用） | 1st 1153ms → 2nd **144ms** | definitions/processes 结构 |
+| ✅ | max_search_semantic 真实 ccc | 459ms | `CHANGELOG.md:L11-14 (markdown) score=0.81` |
+| ✅ | 缓存命中 | 2ms | 前缀 `[cached, 60s TTL]` |
+| ✅ | 软错误（空 query / 后端缺失 / 超时 / 8MB 超限） | — | `isError:true` + 可执行修复命令，**永不 throw** |
 
-no matching nodes across 4 worksp |
-| ✅ PASS | legacy alias graft_ask still works | 230ms | isError=false |
+## 3. 面板（真实浏览器，Playwright）
 
-## 关键实测数据
+26 条断言全绿，关键几条：
 
-- **max_find_docs（qmd 代理）**：真实 BM25 检索 293ms，命中 `qmd://agentcode/README.md:344`（81% 分）
-- **max_trace_arch（gitnexus 代理）**：真实架构图查询 1244ms，返回 JSON 图谱结果
-- **无回归**：graft 六件套 + legacy 别名（graft_ask）全部照常；`tools/list` 一次返回 8 个工具
+| 断言 | 实测 |
+|------|------|
+| 5 张 KPI 卡 + 真实数值 | requests=3 |
+| 工具耗时卡有真实数据行 | 3 行，`repo_map | 1 | 78 ms | 78 ms | 78 ms | 0` |
+| p95 ≥ p50（分位没写反） | 78ms vs 78ms |
+| 联邦后端卡 3 行 + 确定状态 | qmd 就绪 / 刚刚探测 / 297s 后可重探 |
+| 存储卡按仓库分组 + 可复制 | 1 组 / 10 行 |
+| 索引新鲜度卡 | 1 行 `同步` |
+| 实时日志渲染 | 45 行，含汉化后的"工具调用" |
+| 「只看错误」筛选 | 只剩 1 行 err（故意造的一次软错误） |
+| 主题切换 + 刷新后保持 | light → dark，localStorage=dark |
+| 轮询 500ms 真生效 | 2.4s 内 `/stats` 4 次 |
+| 暂停后自动轮询停住 | 1.5s 内 0 请求；手动刷新仍生效 |
+| 「重试探针」 | 真实调用 `/reprobe` 1 次 |
+| 窄屏 430px | 溢出 0px |
+| **零 pageerror / 零 console error** | 0 / 0 |
 
-## E2E 过程中发现并修复的坑（全部沉淀进 federation.ts 注释）
+截图：`ui-interact.png`（面板全页）、`dashboard-*.png`。
 
-1. **Windows .cmd shim**：`spawn('qmd')` ENOENT——npm 全局 CLI 是 cmd shim，需先直试再 shell 兜底（runCli 两段式）
-2. **MCP 握手缺 `notifications/initialized`**：gitnexus 静默丢弃 tools/call
-3. **一次性 write+stdin.end() 丢消息**：经 cmd shim 的管道竞争——必须分步写、保持 stdin 打开（修复后 gitnexus 查询从 45s 超时 → 1.2s 返回）
-4. **spawn cwd 相对路径**：`dist/cli.js` 相对子进程 cwd 解析——必须传绝对路径（fileURLToPath）
+## 4. 性能（`panel-load.mjs`，本机单机）
 
-## 复跑
-
-```powershell
-cd D:\自研工具\graft-Max
-node e2e/e2e-federation.mjs        # 默认根=graft-Max 自身
-$env:E2E_ROOT="C:/Users/Administrator.DESKTOP-EGNE9ND/Desktop/Agent-Code"; node e2e/e2e-federation.mjs
+```
+串行 p50/p95: /stats=3.7/4.4ms  /tail?n=200=1.4/1.8ms  /sessions=1.1/1.5ms
+              /storage=1.1/1.3ms  /fresh=1.1/1.3ms
+并发 50 · 6s · 4181 请求 · 696.8 req/s · p50 70.8ms p95 86.5ms p99 120.1ms · 错误 0
+/storage 20 并发 p50 13.4ms p99 14.2ms
+压力下 /healthz p99 3ms（事件循环未被目录遍历堵死）
 ```
 
-## max.7 联邦性能与第 9 工具（2026-11，e2e-fed-perf.mjs 8/8）
+对照 max.9 基线：`/stats` 50 并发 p95 108ms → 本轮 **86.5ms**（新增 4 张卡后仍更快，
+因为 toolStats 仍是 2s 缓存、storage 改为按 root 分桶）。
 
-真实 stdio JSON-RPC，根目录 = duck2api-hub（授权实验仓库）。真实后端调用，无 mock。
+## 5. 容器（Docker Desktop 29.9.2）
 
-| 用例 | 结果 | 耗时 | 说明 |
-|------|------|------|------|
-| tools/list 含联邦工具组 | ✅ | 695ms | 9 个 max_*（含 max_search_semantic） |
-| T2 qmd 内嵌搜索 | ✅ | ~2-5ms 进程内 | createRequire → 动态 import 修复（top-level-await ESM） |
-| T4 缓存命中 | ✅ | 10-15ms | `[cached, 60s TTL]` 标注 |
-| T3 gitnexus 首调（含握手） | ✅ | 1047-1939ms | — |
-| T3 gitnexus 二调（会话复用） | ✅ | **128-200ms** | 原 1244ms |
-| T5 语义搜索 | ✅ | ~380ms | ccc 本地嵌入，file:line + score |
+`e2e-docker.mjs` 13/13：
 
-复跑：`node e2e/e2e-fed-perf.mjs`（E2E_ROOT 可覆盖，默认 duck2api-hub）
+```
+D1 镜像内版本            0.28.0-max.10
+D5 非 root 运行          uid=node
+D2 MCP initialize        server=graft v=0.28.0-max.10
+D2 tools/list            六个 max_*（+ 已装后端的联邦工具）
+D3 真实工具调用          isError=false（挂载仓库上真建图）
+D6 常驻模式存活          State.Running=true（GRAFT_MAX_LEASH=0）
+D4a 容器形态强制令牌     stderr 带 ?token= 的 URL
+D4b 无令牌 → 401
+D4c /healthz 无鉴权 → 200
+D4d 带令牌 /stats → 200
+D4  /storage             10 条产物
+D4  令牌不落 mcp.log     ✔（写进去等于把钥匙挂在门上）
+```
 
-## 存储/产物视图验收（max.7 追加）
+`verify-compose.mjs` 12/12（**部署后**的真实实例）：
+端口 `24688/tcp -> 127.0.0.1:24688`（不再是 0.0.0.0）、版本 max.10、`dist/panel/` 在镜像里、
+无令牌 401、错误令牌 401、`?token=` 自举 Cookie 后页面 200、`/app.js` 17802B。
 
-- /storage 端点：7 条产物（日志 520KB、sessions.json、~/.trail 30.7KB、.graft-max 523KB、
-  仓库 graft/ 12.6MB、.trail/ 0B、.cocoindex_code/ 60MB）路径+大小全部正确
-- Playwright：表 7 行渲染、复制按钮反馈"已复制"、轮询解耦实证（7s: /stats×4, /storage×1）
-- 截图：dashboard-storage.png（暗色主题存储表）、dashboard-full.png（全页）
+## 6. 环境要求与不可自动化的部分
 
-## Docker 部署 E2E（max.7，e2e/e2e-docker.mjs 9/9）
+| 脚本 | 需要什么 | 没有时 |
+|------|---------|--------|
+| `e2e-ci-smoke` / `panel-load` / `e2e-backend-hotplug` | 只要 `dist/` | 总能跑（CI 用它们） |
+| `e2e-federation` / `e2e-fed-perf` | 真实 qmd + gitnexus（+ ccc）与已建索引的仓库 | 会如实 FAIL，不会假装通过 |
+| `ui-interact` | Playwright（本机全局 1.64.1） | 报错退出 |
+| `e2e-docker` / `verify-compose` | Docker Desktop + 已构建镜像 | 报错退出 |
+| `e2e-dashboard` / `e2e-live-scenario` / `e2e-idempotent` / `e2e-race` | 本机 `Agent-Code` 仓库有索引 | 需改 `E2E_ROOT` |
 
-真实容器、真实 MCP stdio 协议、真实 dashboard HTTP。镜像 `graft-max:latest`（3.2GB，构建 ~60s）。
-
-| 用例 | 结果 | 证据 |
-|------|------|------|
-| D1 镜像内版本 | ✅ | `0.28.0-max.7` |
-| D5 非 root | ✅ | `uid=node` |
-| D2 MCP initialize | ✅ | `server=graft v=0.28.0-max.7` |
-| D2 tools/list 六件套+联邦 | ✅ | max_find_code…max_repo_map(+max_find_docs) |
-| D3 真实工具调用（挂载仓库） | ✅ | `[graft] tokens saved ≈ 5,893 (99%)` |
-| D6 常驻存活（leash 关） | ✅ | State.Running=true, dashboardReady=true |
-| D4 /stats 真实响应 | ✅ | 真实 HTTP |
-| D4 /storage 真实响应 | ✅ | 10 条产物（容器路径 /workspace/graft 等） |
-| D4 日志 boot 行 | ✅ | stderr 面板地址 + 日志文件 boot 行 |
-
-UI 截图：`e2e/docker-dashboard.png`（Playwright 真实浏览器：主题切换持久化、复制按钮反馈"已复制"、
-刷新按钮触发请求、存储表 10 行含 qmd DB/.gitnexus、零 JS 错误）
-
-## max.9 面板重做 + 容器权限修复（真实浏览器验收）
-
-| 验收项 | 结果 | 证据 |
-|--------|------|------|
-| 自动刷新真的在跑 | ✅ | 7s 内 /stats +3 /tail +3（2s 间隔） |
-| 暂停 = 全停 | ✅ | 暂停后 5s 内额外请求 +0 |
-| 主题持久化 | ✅ | 切换后重载仍为所选主题 |
-| 日志级别筛选 | ✅ | "只看错误" 1 行 / "全部" 16 行 |
-| 复制路径 | ✅ | 按钮反馈"已复制" |
-| 零 JS 错误 | ✅ | pageerror/console.error 均为空 |
-| 移动端 430px | ✅ | KPI 卡片宽 196px，两列堆叠 |
-| 容器内数据真实落盘 | ✅ | 命名卷修复后 9/10 产物存在、活跃会话 1（修复前全 0） |
-
-截图：`e2e/dashboard-light.png` / `dashboard-dark.png` / `dashboard-mobile.png`
+**断言强度纪律（P3-18，本轮已修 6 处弱断言）**：不再出现"只判 `result !== undefined`"；
+联邦断言检查内容形状（`qmd://…:line #docid` 正则、`isError` 判失败、`[cached]` 前缀）；
+面板断言检查请求频率、落盘结果与零 JS 错误。
