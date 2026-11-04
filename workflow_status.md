@@ -213,6 +213,19 @@ atomicWrite 并发 rename EPERM（Windows 多进程写 sessions.json 真实发�
 | 新工具 | `scripts/log-attribution.mjs`（真实/沙箱分组、`--json`/`--root`/`--recent`）+ `docs-selfdev/日志归因.md`（683 会话段首次归因） |
 | 全量测试 | **4297 tests / 4192 pass / 0 fail** |
 
+## 7.7 max.13 补丁（2026-11，用户报告"MCP 假死卡住"）
+
+| 项 | 结果 |
+|----|------|
+| 复现 | `e2e/e2e-hang-backend.mjs`：假 gitnexus（握手成功/query 沉默）→ 旧行为 **100s+ 无回包** |
+| 根因 | 各段超时（15s/45s/45s/45s）**串联**，假死后端下 135s+，超过 host 工具超时 |
+| 修法 | `withTotalBudget(60s)` 套整条链；超预算软错误 + 重试指引；底层清理照常 |
+| 契约 | `max_trace_arch` 端到端 ≤ 62s |
+| 实测 | 100126ms 无回包 → **60520ms isError=true**；期间 `max_check_freshness` 111ms（无队头阻塞） |
+| 回归 | federation 9/9、fed-perf 9/9、hotplug 9/9、单测 40/40、ci-smoke 24/24 —— 无劣化 |
+| 版本/发布 | `0.28.0-max.13`，tag + GitHub Release（tarball） |
+| 部署 | 镜像重建 + compose 热更新 → `verify-compose` 12/12 |
+
 ## 8. 独立审查（状态：部分完成，如实记录）
 
 | 项 | 事实 |
