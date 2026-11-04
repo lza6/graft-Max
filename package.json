@@ -86,7 +86,7 @@
     "tree-sitter-swift": "^0.7.1",
     "tree-sitter-typescript": "^0.23.2",
     "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   },
   "allowScripts": {
     "tree-sitter@0.21.1": true,
